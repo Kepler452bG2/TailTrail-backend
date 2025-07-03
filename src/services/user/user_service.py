@@ -1,52 +1,113 @@
-from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
-import jwt
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
+from src.models import User
+
 from src.repositories.user_repository import UserRepository
-from src.schemas.user import UserLogInDTO, UserSignUpDTO
+from src.schemas.user import (
+    UserLogInDTO,
+    UserSignUpDTO,
+    UserUpdateDTO,
+)
 
 
 class UserService:
-    @staticmethod
-    async def create_user(user_data: UserSignUpDTO) -> str:
-        existing_user = await UserRepository.find_one_or_none(email=user_data.email)
+    def __init__(self, db: AsyncSession):
+        self.user_repository = UserRepository(db)
+
+    async def create_user(self, user_data: UserSignUpDTO) -> None:
+        existing_user = await self.user_repository.find_one_or_none(
+            email=user_data.email
+        )
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use!"
             )
 
-        new_user = await UserRepository.insert_one(user_data)
-        if not new_user:
+        new_user = User.create_user(user_data)
+        created_user = await self.user_repository.insert_one(new_user)
+        if not created_user:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error creating user!",
             )
 
-        return UserService.generate_token({"user_id": str(new_user.id)})
 
-    @staticmethod
-    async def authenticate_user(user_data: UserLogInDTO) -> str:
-        user = await UserRepository.find_one_or_none(email=user_data.email)
+    async def authenticate_user(self, user_data: UserLogInDTO) -> str:
+        user = await self.user_repository.find_one_or_none(email=user_data.email)
         if not user or not user.check_password(user_data.password):
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials!"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials!"
             )
 
-        return UserService.generate_token({"user_id": str(user.id)})
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified!"
+            )
 
-    @staticmethod
-    def generate_token(payload: dict) -> str:
-        payload["exp"] = datetime.now(UTC) + timedelta(seconds=settings.jwt_expiration)
-        return jwt.encode(payload, settings.secret_key, algorithm="HS256")
+        token_payload = {"user_id": str(user.id), "roles": user.roles}
+        return token_util.generate_token(token_payload)
 
-    @staticmethod
-    def verify_token(token: str) -> dict:
-        try:
-            return jwt.decode(token, settings.secret_key, algorithms=["HS256"])
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Token expired!")
-        except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid token!")
+    async def get_user_by_id(self, user_id: UUID) -> User:
+        user = await self.user_repository.find_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found!"
+            )
+        return user
+
+
+    async def update_user(
+        self, user_data: UserUpdateDTO, profile_image_url: str | None = None
+    ) -> None:
+        user = await self.user_repository.find_one_or_none(id=user_data.user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found!"
+            )
+
+        if user_data.username is not None:
+            user.username = user_data.username
+        if user_data.phone is not None:
+            user.phone = user_data.phone
+
+        if profile_image_url:
+            user.image_url = profile_image_url
+
+        if user_data.new_password:
+            if not user_data.current_password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="current_password is required to set a new password",
+                )
+            if not user.check_password(user_data.current_password):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid current password",
+                )
+            user.set_password(user_data.new_password)
+
+        await self.user_repository.update_one(user)
+
+
+    async def delete_user_by_id(self, user_id: UUID) -> None:
+        user = await self.user_repository.find_one_or_none(id=user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found!"
+            )
+
+        await self.user_repository.delete_one(user_id)
+
+    async def delete_profile_image(self, user_id: UUID) -> None:
+        user = await self.user_repository.find_one_or_none(id=user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found!"
+            )
+
+        user.image_url = ""
+        await self.user_repository.update_one(user)
