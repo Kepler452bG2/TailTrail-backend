@@ -1,0 +1,19 @@
+# Исключаем виртуальные окружения, артефакты, системные файлы и прочее
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.DS_Store
+
+
+
+# Исключаем внутренние служебные папки и файлы
+.git/
+.gitignore
+docker-compose.yml
+Dockerfile
+.dockerignore
+.idea/
+.vscode/    

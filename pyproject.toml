@@ -1,0 +1,37 @@
+[tool.ruff]
+src = ["app"]
+target-version = "py311"
+line-length = 88
+lint.fixable = ["ALL"]
+lint.unfixable = []
+
+lint.select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C90",
+    "T20",
+    "RUF",
+]
+
+lint.ignore = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-bandit]
+check-typed-exception = true
+
+
+[tool.ruff.format]
+quote-style = "single"
+line-ending = "lf"
+indent-style = "space"
+skip-magic-trailing-comma = false
