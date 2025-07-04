@@ -9,23 +9,23 @@ ENV_PATH = BASE_DIR / ".env"
 
 
 class Settings(BaseSettings):
-    database_url: Optional[str] = None
-    secret_key: str
-    jwt_expiration: int
-    echo_sql: bool = True
-    debug_logs: bool = True
-    db_host: str
-    db_port: int
-    db_user: str
-    db_pass: str
-    db_name: str
+    DATABASE_URL: Optional[str] = None
+    SECRET_KEY: str
+    JWT_EXPIRATION: int
+    ECHO_SQL: bool = True
+    DEBUG_LOGS: bool = True
+    DB_HOST: str
+    DB_PORT: int
+    DB_USER: str
+    DB_PASS: str
+    DB_NAME: str
 
     @model_validator(mode="after")
     def fill_database_url(self):
-        if not self.database_url:
-            self.database_url = (
-                f"postgresql+asyncpg://{self.db_user}:{self.db_pass}"
-                f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        if not self.DATABASE_URL:
+            self.DATABASE_URL = (
+                f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}"
+                f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
             )
         return self
 

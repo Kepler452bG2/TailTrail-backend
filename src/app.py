@@ -11,7 +11,7 @@ from src.database import sessionmanager
 from src.routes import router as api_v1_router
 
 logging.basicConfig(
-    stream=sys.stdout, level=logging.DEBUG if settings.debug_logs else logging.INFO
+    stream=sys.stdout, level=logging.DEBUG if settings.DEBUG_LOGS else logging.INFO
 )
 
 

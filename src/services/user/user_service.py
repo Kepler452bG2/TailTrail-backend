@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import User
 
+from src.utils.token_util import generate_token
+
 from src.repositories.user_repository import UserRepository
 from src.schemas.user import (
     UserLogInDTO,
@@ -42,13 +44,8 @@ class UserService:
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials!"
             )
 
-        if not user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified!"
-            )
-
-        token_payload = {"user_id": str(user.id), "roles": user.roles}
-        return token_util.generate_token(token_payload)
+        token_payload = {"user_id": str(user.id)}
+        return generate_token(token_payload)
 
     async def get_user_by_id(self, user_id: UUID) -> User:
         user = await self.user_repository.find_by_id(user_id)

@@ -12,7 +12,7 @@ router = APIRouter()
 async def signup(request: UserSignUpDTO, db: DBSessionDep) -> dict:
     user_service = UserService(db=db)
     await user_service.create_user(user_data=request)
-    return {"detail": "Email with verification code sent successfully!"}
+    return {"detail": "User created successfully!"}
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)

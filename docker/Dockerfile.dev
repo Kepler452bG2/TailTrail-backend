@@ -1,7 +1,22 @@
-FROM python:3.11-alpine
+FROM python:3.12-slim
 
-WORKDIR /src
+# Set working directory
+WORKDIR /app
 
-COPY .. /src
+# Install uv
+RUN pip install --no-cache-dir uv
 
-RUN pip install --no-cache-dir -r requirements/dev.txt
+# Copy uv configuration files first for better caching
+COPY pyproject.toml uv.lock ./
+
+# Create virtual environment and install dependencies
+RUN uv sync --frozen
+
+# Copy all application files (excluding .venv via .dockerignore)
+COPY . .
+
+# Expose port
+EXPOSE 8000
+
+# Run the application with auto-reload for development using uv
+CMD ["uv", "run", "uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -6,15 +6,14 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 
 
 class UserSignUpDTO(BaseModel):
-    username: str
     email: EmailStr
     password: str
-    phone: str = Field(..., pattern=r"^\+\d{1,15}$")
+    phone: str | None = Field(None, pattern=r"^\+\d{1,15}$")
 
     @field_validator("phone")
     @classmethod
-    def validate_phone(cls, v: str) -> str:
-        if not re.match(r"^\+\d{1,15}$", v):
+    def validate_phone(cls, v: str | None) -> str | None:
+        if v is not None and not re.match(r"^\+\d{1,15}$", v):
             raise ValueError("Invalid phone number")
         return v
 
@@ -45,17 +44,14 @@ class UserLogInDTO(BaseModel):
 
 class UserDTO(BaseModel):
     id: uuid.UUID
-    username: str
     email: str
-    phone: str
+    phone: str | None
     created_at: datetime
-    is_verified: bool
     image_url: str | None
 
 
 class UserUpdateDTO(BaseModel):
     user_id: uuid.UUID
-    username: str | None = Field(default=None)
     phone: str | None = Field(default=None)
     current_password: str | None = Field(default=None)
     new_password: str | None = Field(default=None)

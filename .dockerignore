@@ -1,19 +1,50 @@
-# Исключаем виртуальные окружения, артефакты, системные файлы и прочее
+# Virtual environments
+.venv/
 venv/
+env/
+
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.sqlite3
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
 
-
-
-# Исключаем внутренние служебные папки и файлы
+# Git
 .git/
 .gitignore
-docker-compose.yml
-Dockerfile
+
+# Docker
+Dockerfile*
+docker-compose*.yml
 .dockerignore
-.idea/
-.vscode/    
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test coverage
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Исключаем системные файлы и прочее
+*.sqlite3
