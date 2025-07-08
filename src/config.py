@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     DB_PASS: str
     DB_NAME: str
 
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_S3_BUCKET_NAME: str = "tail-trail-bucket"
+    AWS_REGION: str = "us-east-1"
+    AWS_CLOUDFRONT_URL: Optional[str] = None
+
     @model_validator(mode="after")
     def fill_database_url(self):
         if not self.DATABASE_URL:

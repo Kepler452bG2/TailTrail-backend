@@ -4,7 +4,7 @@ from datetime import datetime
 import bcrypt
 from sqlalchemy import UUID, DateTime, String, func, Boolean
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import Base
 from src.schemas.user import UserSignUpDTO
@@ -23,6 +23,9 @@ class User(Base):
         DateTime, default=func.now(), nullable=False
     )
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Связь с постами
+    posts: Mapped[list["Post"]] = relationship("Post", back_populates="user")
 
     @hybrid_property
     def hashed_password(self) -> str:

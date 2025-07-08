@@ -2,9 +2,9 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from asyncpg import Connection
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.engine import Connection
 from src.models import Base
 
 # this is the Alembic Config object, which provides
