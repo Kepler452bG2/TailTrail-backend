@@ -109,6 +109,16 @@ class PostResponseDTO(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: uuid.UUID
+    likes_count: int = Field(default=0, description="Number of likes")
+    is_liked: bool = Field(default=False, description="Whether current user liked this post")
+
+
+class LikeResponseDTO(BaseModel):
+    """DTO for like response"""
+    post_id: uuid.UUID
+    user_id: uuid.UUID
+    likes_count: int
+    is_liked: bool
 
 
 class PostFiltersDTO(BaseModel):

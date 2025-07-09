@@ -1,6 +1,11 @@
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
-Base = declarative_base()
 
+class Base(DeclarativeBase):
+    pass
+
+
+# Import all models to ensure they are registered
 from .user import User
 from .post import Post
+from .like import Like

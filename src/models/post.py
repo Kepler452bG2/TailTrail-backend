@@ -44,4 +44,6 @@ class Post(Base):
     
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
 
-    user: Mapped["User"] = relationship("User", back_populates="posts") 
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="posts")
+    likes: Mapped[List["Like"]] = relationship("Like", back_populates="post", cascade="all, delete-orphan") 

@@ -1,6 +1,6 @@
 import uuid
 import math
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,8 @@ from src.schemas.post import (
     PostFiltersDTO,
     PostPaginationDTO,
     PostListResponseDTO,
-    PostLocationDTO
+    PostLocationDTO,
+    LikeResponseDTO
 )
 
 
@@ -50,9 +51,9 @@ class PostService:
                 detail="Error creating post"
             )
         
-        return self._post_to_response_dto(created_post)
+        return await self._post_to_response_dto(created_post, user_id)
 
-    async def get_post_by_id(self, post_id: uuid.UUID) -> PostResponseDTO:
+    async def get_post_by_id(self, post_id: uuid.UUID, current_user_id: Optional[uuid.UUID] = None) -> PostResponseDTO:
         post = await self.post_repository.find_by_id(post_id)
         if not post:
             raise HTTPException(
@@ -60,12 +61,13 @@ class PostService:
                 detail="Post not found"
             )
         
-        return self._post_to_response_dto(post)
+        return await self._post_to_response_dto(post, current_user_id)
 
     async def get_posts_with_filters(
         self,
         filters: PostFiltersDTO,
-        pagination: PostPaginationDTO
+        pagination: PostPaginationDTO,
+        current_user_id: Optional[uuid.UUID] = None
     ) -> PostListResponseDTO:
         posts, total_count = await self.post_repository.find_with_filters_and_pagination(
             filters, pagination
@@ -75,7 +77,10 @@ class PostService:
         has_next = pagination.page < total_pages
         has_prev = pagination.page > 1
         
-        post_dtos = [self._post_to_response_dto(post) for post in posts]
+        post_dtos = []
+        for post in posts:
+            post_dto = await self._post_to_response_dto(post, current_user_id)
+            post_dtos.append(post_dto)
         
         return PostListResponseDTO(
             posts=post_dtos,
@@ -141,7 +146,7 @@ class PostService:
                 detail="Error updating post"
             )
         
-        return self._post_to_response_dto(updated_post)
+        return await self._post_to_response_dto(updated_post, user_id)
 
     async def delete_post(self, post_id: uuid.UUID, user_id: uuid.UUID) -> None:
         post = await self.post_repository.find_by_id(post_id)
@@ -164,13 +169,21 @@ class PostService:
                 detail="Error deleting post"
             )
 
-    async def get_user_posts(self, user_id: uuid.UUID) -> List[PostResponseDTO]:
+    async def get_user_posts(self, user_id: uuid.UUID, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
         posts = await self.post_repository.find_by_user_id(user_id)
-        return [self._post_to_response_dto(post) for post in posts]
+        post_dtos = []
+        for post in posts:
+            post_dto = await self._post_to_response_dto(post, current_user_id)
+            post_dtos.append(post_dto)
+        return post_dtos
 
-    async def search_posts(self, search_text: str) -> List[PostResponseDTO]:
+    async def search_posts(self, search_text: str, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
         posts = await self.post_repository.search_by_text(search_text)
-        return [self._post_to_response_dto(post) for post in posts]
+        post_dtos = []
+        for post in posts:
+            post_dto = await self._post_to_response_dto(post, current_user_id)
+            post_dtos.append(post_dto)
+        return post_dtos
 
     async def get_posts_statistics(self) -> Dict[str, Any]:
         return await self.post_repository.get_posts_statistics()
@@ -201,29 +214,84 @@ class PostService:
         
         post.status = new_status
         updated_post = await self.post_repository.update_one(post)
-        
         if not updated_post:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error updating post status"
             )
         
-        return self._post_to_response_dto(updated_post)
+        return await self._post_to_response_dto(updated_post, user_id)
 
     async def update_post_images(self, post_id: int, image_urls: list[str], user_id: int) -> PostResponseDTO:
-        """Update list of post images"""
-        post = await self.get_post_by_id(post_id)
+        """Update post images"""
+        post = await self.post_repository.find_by_id(post_id)
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
         
         if post.user_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No permission to change this post"
+                detail="No permission to edit this post"
             )
         
-        updated_post = await self.post_repository.update_post_images(post_id, image_urls)
-        return self._post_to_response_dto(updated_post)
+        post.images = image_urls
+        updated_post = await self.post_repository.update_one(post)
+        return await self._post_to_response_dto(updated_post, user_id)
 
-    def _post_to_response_dto(self, post: Post) -> PostResponseDTO:
+    # Методы для работы с лайками
+    async def toggle_like(self, post_id: uuid.UUID, user_id: uuid.UUID) -> LikeResponseDTO:
+        """Toggle like on a post (like if not liked, unlike if liked)"""
+        
+        # Check if post exists
+        post = await self.post_repository.find_by_id(post_id)
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+        
+        # Check if user already liked this post
+        existing_like = await self.post_repository.find_like_by_user_and_post(user_id, post_id)
+        
+        if existing_like:
+            # Unlike the post
+            await self.post_repository.delete_like_by_user_and_post(user_id, post_id)
+            is_liked = False
+        else:
+            # Like the post
+            await self.post_repository.create_like(user_id, post_id)
+            is_liked = True
+        
+        # Get updated likes count
+        likes_count = await self.post_repository.count_likes_by_post(post_id)
+        
+        return LikeResponseDTO(
+            post_id=post_id,
+            user_id=user_id,
+            likes_count=likes_count,
+            is_liked=is_liked
+        )
+
+    async def get_like_status(self, post_id: uuid.UUID, user_id: Optional[uuid.UUID] = None) -> tuple[int, bool]:
+        """Get like count and whether user has liked the post"""
+        likes_count = await self.post_repository.count_likes_by_post(post_id)
+        is_liked = False
+        
+        if user_id:
+            existing_like = await self.post_repository.find_like_by_user_and_post(user_id, post_id)
+            is_liked = existing_like is not None
+        
+        return likes_count, is_liked
+
+    async def _post_to_response_dto(self, post: Post, current_user_id: Optional[uuid.UUID] = None) -> PostResponseDTO:
+        """Convert Post model to PostResponseDTO with like information"""
+        
+        # Get like information
+        likes_count, is_liked = await self.get_like_status(post.id, current_user_id)
+        
         return PostResponseDTO(
             id=post.id,
             pet_name=post.pet_name,
@@ -244,5 +312,7 @@ class PostService:
             status=post.status,
             created_at=post.created_at,
             updated_at=post.updated_at,
-            user_id=post.user_id
+            user_id=post.user_id,
+            likes_count=likes_count,
+            is_liked=is_liked
         ) 

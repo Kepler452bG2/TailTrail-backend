@@ -4,11 +4,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from fastapi import HTTPException, status
 
-from sqlalchemy import select, and_, or_, func, desc, asc
+from sqlalchemy import select, and_, or_, func, desc, asc, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.dao.sqlalchemy_dao import SQLAlchemyDAO
 from src.models.post import Post
+from src.models.like import Like
 from src.repositories.base_repository import BaseRepository
 from src.schemas.post import PostFiltersDTO, PostPaginationDTO, PostStatus
 
@@ -187,4 +188,42 @@ class PostRepository(BaseRepository[Post]):
             
             await session.commit()
             await session.refresh(post)
-            return post 
+            return post
+
+    # Методы для работы с лайками
+    async def find_like_by_user_and_post(self, user_id: uuid.UUID, post_id: uuid.UUID) -> Optional[Like]:
+        """Find like by user and post"""
+        query = select(Like).where(
+            Like.user_id == user_id,
+            Like.post_id == post_id
+        )
+        result = await self.dao.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def count_likes_by_post(self, post_id: uuid.UUID) -> int:
+        """Count likes for a specific post"""
+        query = select(func.count(Like.id)).where(Like.post_id == post_id)
+        result = await self.dao.db.execute(query)
+        return result.scalar() or 0
+
+    async def delete_like_by_user_and_post(self, user_id: uuid.UUID, post_id: uuid.UUID) -> bool:
+        """Delete like by user and post"""
+        query = delete(Like).where(
+            Like.user_id == user_id,
+            Like.post_id == post_id
+        )
+        result = await self.dao.db.execute(query)
+        await self.dao.db.commit()
+        return result.rowcount > 0
+
+    async def create_like(self, user_id: uuid.UUID, post_id: uuid.UUID) -> Like:
+        """Create a new like"""
+        new_like = Like(
+            user_id=user_id,
+            post_id=post_id
+        )
+        
+        self.dao.db.add(new_like)
+        await self.dao.db.commit()
+        await self.dao.db.refresh(new_like)
+        return new_like 

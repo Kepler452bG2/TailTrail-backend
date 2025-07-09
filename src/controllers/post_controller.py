@@ -13,7 +13,8 @@ from src.schemas.post import (
     PostFiltersDTO,
     PostPaginationDTO,
     PostCreateWithFiles,
-    PostUploadResponse
+    PostUploadResponse,
+    LikeResponseDTO
 )
 from src.services.post.post_service import PostService
 from src.utils.upload.upload_service import get_upload_service
@@ -21,23 +22,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    responses={
-        401: {"description": "Unauthorized"},
-        500: {"description": "Internal server error"}
-    }
-)
+router = APIRouter()
 
 
 @router.get('/{post_id}', status_code=200, response_model=PostResponseDTO)
-async def get_post(post_id: uuid.UUID, db: DBSessionDep):
+async def get_post(post_id: uuid.UUID, db: DBSessionDep, current_user: CurrentUserDep = None):
     post_service = PostService(db)
-    return await post_service.get_post_by_id(post_id)
+    return await post_service.get_post_by_id(post_id, current_user.id if current_user else None)
 
 
 @router.get('/', status_code=200, response_model=PostListResponseDTO)
 async def get_posts(
     db: DBSessionDep,
+    current_user: CurrentUserDep = None,
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     sort_by: str = Query("created_at", description="Sort field"),
@@ -84,7 +81,7 @@ async def get_posts(
     )
     
     post_service = PostService(db)
-    return await post_service.get_posts_with_filters(filters, pagination)
+    return await post_service.get_posts_with_filters(filters, pagination, current_user.id if current_user else None)
 
 
 @router.post("/", 
@@ -274,16 +271,17 @@ async def get_my_posts(
     current_user: CurrentUserDep
 ):
     post_service = PostService(db)
-    return await post_service.get_user_posts(current_user.id)
+    return await post_service.get_user_posts(current_user.id, current_user.id)
 
 
 @router.get('/search/text', status_code=200, response_model=List[PostResponseDTO])
 async def search_posts(
     search_text: str = Query(..., min_length=2, description="Search text"),
-    db: DBSessionDep = DBSessionDep
+    db: DBSessionDep = DBSessionDep,
+    current_user: CurrentUserDep = None
 ):
     post_service = PostService(db)
-    return await post_service.search_posts(search_text)
+    return await post_service.search_posts(search_text, current_user.id if current_user else None)
 
 
 @router.patch('/{post_id}/status', status_code=200, response_model=PostResponseDTO)
@@ -295,4 +293,36 @@ async def change_post_status(
 ):
     post_service = PostService(db)
     return await post_service.change_post_status(post_id, new_status, current_user.id)
+
+
+# Новые роуты для лайков
+@router.post('/{post_id}/like', status_code=200, response_model=LikeResponseDTO)
+async def toggle_like(
+    post_id: uuid.UUID,
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Toggle like on a post (like if not liked, unlike if liked)"""
+    post_service = PostService(db)
+    return await post_service.toggle_like(post_id, current_user.id)
+
+
+@router.get('/{post_id}/likes', status_code=200)
+async def get_like_status(
+    post_id: uuid.UUID,
+    db: DBSessionDep,
+    current_user: CurrentUserDep = None
+):
+    """Get like count and status for a post"""
+    post_service = PostService(db)
+    likes_count, is_liked = await post_service.get_like_status(
+        post_id, 
+        current_user.id if current_user else None
+    )
+    
+    return {
+        "post_id": post_id,
+        "likes_count": likes_count,
+        "is_liked": is_liked
+    }
 

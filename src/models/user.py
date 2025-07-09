@@ -24,8 +24,9 @@ class User(Base):
     )
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Связь с постами
+    # Relationships
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="user")
+    likes: Mapped[list["Like"]] = relationship("Like", back_populates="user", cascade="all, delete-orphan")
 
     @hybrid_property
     def hashed_password(self) -> str:
