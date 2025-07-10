@@ -6,7 +6,9 @@ from starlette.responses import JSONResponse
 
 from src.dependencies import DBSessionDep, CurrentUserDep
 from src.schemas.post import (
+    Coordinates,
     PostCreateDTO,
+    PostLocationDTO,
     PostUpdateDTO,
     PostResponseDTO,
     PostListResponseDTO,
@@ -92,110 +94,82 @@ async def get_posts(
 async def create_post(
     db: DBSessionDep,
     current_user: CurrentUserDep,
-    petName: str = Form(..., 
-                        description="Pet name", 
-                        example="Ginger"),
-    petSpecies: str = Form(..., 
-                          description="Pet species", 
-                          example="Cat"),
-    petBreed: str = Form(..., 
-                        description="Pet breed", 
-                        example="British Shorthair"),
-    age: int = Form(..., 
-                   description="Pet age in years", 
-                   example=3),
-    gender: str = Form(..., 
-                      description="Pet gender (auto-converts: male, female)", 
-                      example="male"),
-    weight: float = Form(..., 
-                      description="Pet weight in kg", 
-                      example=5.0),
-    color: str = Form(..., 
-                     description="Pet color", 
-                     example="Orange"),
-    description: str = Form(..., 
-                           description="Detailed description of appearance and characteristics (minimum 10 characters)", 
-                           example="Lost orange cat. Very friendly, responds to name. Loves playing with a ball."),
-    locationName: str = Form(..., 
-                            description="Location name where last seen", 
-                            example="Central Park, New York"),
-    contactPhone: str = Form(..., 
-                            description="Contact phone (format: +country_code_number)", 
-                            example="+12345678901"),
-    lat: float = Form(..., 
-                     ge=-90, 
-                     le=90, 
-                     description="Latitude of last seen location (can be obtained from Google/Yandex Maps)", 
-                     example=40.7829),
-    lng: float = Form(..., 
-                     ge=-180, 
-                     le=180, 
-                     description="Longitude of last seen location (can be obtained from Google/Yandex Maps)", 
-                     example=-73.9654),
-    files: List[UploadFile] = File(None, 
-                                  description="Pet photos (JPG/PNG/GIF, up to 10MB each, recommended 1-5 photos)")
+    petName: Optional[str] = Form(None, 
+                                 description="Pet name", 
+                                 example="Ginger"),
+    petSpecies: Optional[str] = Form(None, 
+                                    description="Pet species", 
+                                    example="Cat"),
+    petBreed: Optional[str] = Form(None, 
+                                  description="Pet breed", 
+                                  example="British Shorthair"),
+    age: Optional[int] = Form(None, 
+                             description="Pet age in years", 
+                             example="3"),
+    gender: Optional[str] = Form(None, 
+                                description="Pet gender (auto-converts: male, female)", 
+                                example="male"),
+    weight: Optional[float] = Form(None, 
+                                description="Pet weight in kg", 
+                                example="5.0"),
+    color: Optional[str] = Form(None, 
+                               description="Pet color", 
+                               example="Orange"),
+    description: Optional[str] = Form(None, 
+                                     description="Detailed description of appearance and characteristics", 
+                                     example="Lost orange cat. Very friendly, responds to name. Loves playing with a ball."),
+    locationName: Optional[str] = Form(None, 
+                                      description="Location name where last seen", 
+                                      example="Central Park, New York"),
+    contactPhone: Optional[str] = Form(None, 
+                                      description="Contact phone (format: +country_code_number)", 
+                                      example="+12345678901"),
+    lat: Optional[float] = Form(None, 
+                             description="Latitude of last seen location (can be obtained from Google/Yandex Maps)", 
+                             example="40.7829"),
+    lng: Optional[float] = Form(None, 
+                             description="Longitude of last seen location (can be obtained from Google/Yandex Maps)", 
+                             example="-73.9654"),
+    files: Optional[List[UploadFile]] = File(None, 
+                                           description="Pet photos (JPG/PNG/GIF, up to 10MB each, recommended 1-5 photos)")
 ):
     try:
-        # Создаем координаты из отдельных полей
-        from src.schemas.post import Coordinates
-        coordinates = Coordinates(lat=lat, lng=lng)
+        coordinates = None
+        location_dto = None
         
-        # Создаем объект поста
-        post_data = PostCreateWithFiles(
-            petName=petName,
-            petSpecies=petSpecies,
-            petBreed=petBreed,
-            age=age,
-            gender=gender,
-            weight=weight,
-            color=color,
-            description=description,
-            locationName=locationName,
-            contactPhone=contactPhone,
-            lastSeenLocation=coordinates
-        )
-        try:
-            age_number = int(''.join(filter(str.isdigit, age))) if age else 0
-        except:
-            age_number = 0
-            
-        try:
-            # Пытаемся извлечь число из строки веса
-            weight_str = weight.replace(',', '.').replace(' ', '')
-            weight_number = float(''.join(c for c in weight_str if c.isdigit() or c == '.'))
-        except:
-            weight_number = 1.0
+        if lat is not None and lng is not None:
+            coordinates = Coordinates(lat=lat, lng=lng)
+            location_dto = PostLocationDTO(
+                latitude=coordinates.lat,
+                longitude=coordinates.lng
+            )
         
-        # Создаем координаты для PostLocationDTO
-        from src.schemas.post import PostLocationDTO
-        location_dto = PostLocationDTO(
-            latitude=coordinates.lat,
-            longitude=coordinates.lng
-        )
-        
-        # Создаем пост без загруженных файлов (добавим их позже)
+        # Создаем пост без значений по умолчанию - пустые значения будут NULL
         post_dto = PostCreateDTO(
-            pet_name=post_data.petName,
-            pet_species=post_data.petSpecies,
-            pet_breed=post_data.petBreed,
-            age=age_number,
-            gender=gender,
-            weight=weight_number,
-            color=post_data.color,
-            description=post_data.description,
-            location_name=post_data.locationName,
-            contact_phone=post_data.contactPhone,
+            pet_name=petName if petName and petName.strip() else None,
+            pet_species=petSpecies if petSpecies and petSpecies.strip() else None,
+            pet_breed=petBreed if petBreed and petBreed.strip() else None,
+            age=age,
+            gender=gender if gender and gender.strip() else None,
+            weight=weight,
+            color=color if color and color.strip() else None,
+            description=description if description and description.strip() else None,
+            location_name=locationName if locationName and locationName.strip() else None,
+            contact_phone=contactPhone if contactPhone and contactPhone.strip() else None,
             last_seen_location=location_dto,
-            images=["placeholder"]  
+            images=[]  
         )
         
         uploaded_files = []
         failed_uploads = []
         
-        if files and len(files) > 0 and files[0].filename: 
+        if files and len(files) > 0 and files[0] and files[0].filename: 
             upload_service = get_upload_service()
             
             for file in files:
+                if file is None:
+                    continue
+                    
                 try:
                     file_content = await file.read()
                     
@@ -216,10 +190,8 @@ async def create_post(
                     logger.error(f"Error processing file {file.filename}: {e}")
                     failed_uploads.append(f"{file.filename}: {str(e)}")
         
-        if uploaded_files:
-            post_dto.images = uploaded_files
-        else:
-            post_dto.images = []
+        # Устанавливаем загруженные файлы или пустой список
+        post_dto.images = uploaded_files if uploaded_files else []
         
         post_service = PostService(db)
         post = await post_service.create_post(post_dto, current_user.id)

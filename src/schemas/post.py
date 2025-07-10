@@ -25,86 +25,163 @@ class Coordinates(BaseModel):
 
 class PostCreateDTO(BaseModel):
     """DTO for creating a post"""
-    pet_name: str = Field(..., min_length=1, max_length=100, description="Pet name")
-    pet_species: str = Field(..., min_length=1, max_length=50, description="Pet species")
-    pet_breed: str = Field(..., min_length=1, max_length=100, description="Pet breed")
-    age: int = Field(..., ge=0, le=30, description="Pet age")
-    gender: str = Field(..., pattern="^(male|female|unknown)$", description="Pet gender")
-    weight: float = Field(..., ge=0.1, le=200, description="Pet weight in kg")
-    color: str = Field(..., min_length=1, max_length=50, description="Pet color")
-    description: str = Field(..., min_length=10, max_length=2000, description="Description")
-    location_name: str = Field(..., min_length=1, max_length=200, description="Location name")
-    contact_phone: str = Field(..., pattern=r"^\+\d{1,15}$", description="Contact phone")
-    last_seen_location: PostLocationDTO = Field(..., description="Last seen location coordinates")
-    images: List[str] = Field(..., min_items=1, max_items=10, description="Array of image URLs")
+    pet_name: Optional[str] = Field(None, max_length=100, description="Pet name")
+    pet_species: Optional[str] = Field(None, max_length=50, description="Pet species")
+    pet_breed: Optional[str] = Field(None, max_length=100, description="Pet breed")
+    age: Optional[int] = Field(None, le=30, description="Pet age")
+    gender: Optional[str] = Field(None, description="Pet gender")
+    weight: Optional[float] = Field(None, le=200, description="Pet weight in kg")
+    color: Optional[str] = Field(None, max_length=50, description="Pet color")
+    description: Optional[str] = Field(None, max_length=2000, description="Description")
+    location_name: Optional[str] = Field(None, max_length=200, description="Location name")
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
+    last_seen_location: Optional[PostLocationDTO] = Field(None, description="Last seen location coordinates")
+    images: Optional[List[str]] = Field(None, max_items=10, description="Array of image URLs")
+
+    @field_validator('weight')
+    @classmethod
+    def validate_weight(cls, v):
+        if v is not None:
+            # Если это строка и она равна 'string' или пустая - возвращаем None
+            if isinstance(v, str) and (v.strip().lower() == 'string' or not v.strip()):
+                return None
+            # Если это число и оно меньше 0 - возвращаем None
+            if isinstance(v, (int, float)) and v < 0:
+                return None
+        return v
+
+    @field_validator('age')
+    @classmethod
+    def validate_age(cls, v):
+        if v is not None:
+            # Если это строка и она равна 'string' или пустая - возвращаем None
+            if isinstance(v, str) and (v.strip().lower() == 'string' or not v.strip()):
+                return None
+            # Если это число и оно меньше 0 - возвращаем None
+            if isinstance(v, (int, float)) and v < 0:
+                return None
+        return v
+
+    @field_validator('contact_phone')
+    @classmethod
+    def validate_contact_phone(cls, v):
+        if v is not None and v.strip() and v.strip().lower() != 'string' and not v.startswith('+'):
+            raise ValueError('Contact phone must start with +')
+        return v if v and v.strip() and v.strip().lower() != 'string' else None
+
+    @field_validator('gender')
+    @classmethod
+    def validate_gender(cls, v):
+        if v is not None and v.strip() and v.strip().lower() != 'string' and v not in ['male', 'female', 'unknown']:
+            raise ValueError('Gender must be male, female, or unknown')
+        return v if v and v.strip() and v.strip().lower() != 'string' else None
 
     @field_validator('images')
     @classmethod
     def validate_images(cls, v):
-        if not v:
-            raise ValueError('At least one image must be uploaded')
+        # Разрешаем пустые списки - они будут сохранены как пустой список в БД
+        if v is not None and len(v) == 0:
+            return []
         return v
 
 
 class PostCreate(BaseModel):
-    petName: str = Field(..., min_length=1, max_length=100)
-    petSpecies: str = Field(..., min_length=1, max_length=50) 
-    petBreed: str = Field(..., min_length=1, max_length=100)
-    age: str = Field(..., min_length=1, max_length=50)
-    gender: str = Field(..., min_length=1, max_length=20)
-    weight: str = Field(..., min_length=1, max_length=50)
-    color: str = Field(..., min_length=1, max_length=100)
-    description: str = Field(..., min_length=1, max_length=2000)
-    locationName: str = Field(..., min_length=1, max_length=200)
-    contactPhone: str = Field(..., min_length=1, max_length=20)
-    lastSeenLocation: Coordinates
+    petName: Optional[str] = Field(None, max_length=100)
+    petSpecies: Optional[str] = Field(None, max_length=50) 
+    petBreed: Optional[str] = Field(None, max_length=100)
+    age: Optional[str] = Field(None, max_length=50)
+    gender: Optional[str] = Field(None, max_length=20)
+    weight: Optional[str] = Field(None, max_length=50)
+    color: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=2000)
+    locationName: Optional[str] = Field(None, max_length=200)
+    contactPhone: Optional[str] = Field(None, max_length=20)
+    lastSeenLocation: Optional[Coordinates] = None
 
 
 class PostCreateWithFiles(BaseModel):
     """Schema for creating posts with file uploads - matches controller Form parameters"""
-    petName: str = Field(..., min_length=1, max_length=100)
-    petSpecies: str = Field(..., min_length=1, max_length=50) 
-    petBreed: str = Field(..., min_length=1, max_length=100)
-    age: int = Field(..., ge=0, le=30, description="Pet age in years")
-    gender: str = Field(..., min_length=1, max_length=20)
-    weight: float = Field(..., ge=0.1, le=200.0, description="Pet weight in kg")
-    color: str = Field(..., min_length=1, max_length=100)
-    description: str = Field(..., min_length=1, max_length=2000)
-    locationName: str = Field(..., min_length=1, max_length=200)
-    contactPhone: str = Field(..., min_length=1, max_length=20)
-    lastSeenLocation: Coordinates
+    petName: Optional[str] = Field(None, max_length=100)
+    petSpecies: Optional[str] = Field(None, max_length=50) 
+    petBreed: Optional[str] = Field(None, max_length=100)
+    age: Optional[str] = Field(None, description="Pet age in years as string")
+    gender: Optional[str] = Field(None, max_length=20)
+    weight: Optional[str] = Field(None, description="Pet weight in kg as string")
+    color: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=2000)
+    locationName: Optional[str] = Field(None, max_length=200)
+    contactPhone: Optional[str] = Field(None, max_length=20)
+    lastSeenLocation: Optional[Coordinates] = None
 
 
 class PostUpdateDTO(BaseModel):
-    pet_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    pet_species: Optional[str] = Field(None, min_length=1, max_length=50)
-    pet_breed: Optional[str] = Field(None, min_length=1, max_length=100)
-    age: Optional[int] = Field(None, ge=0, le=30)
-    gender: Optional[str] = Field(None, pattern="^(male|female|unknown)$")
-    weight: Optional[float] = Field(None, ge=0.1, le=200)
-    color: Optional[str] = Field(None, min_length=1, max_length=50)
-    description: Optional[str] = Field(None, min_length=10, max_length=2000)
-    location_name: Optional[str] = Field(None, min_length=1, max_length=200)
-    contact_phone: Optional[str] = Field(None, pattern=r"^\+\d{1,15}$")
+    pet_name: Optional[str] = Field(None, max_length=100)
+    pet_species: Optional[str] = Field(None, max_length=50)
+    pet_breed: Optional[str] = Field(None, max_length=100)
+    age: Optional[int] = Field(None, le=30)
+    gender: Optional[str] = Field(None, description="Pet gender")
+    weight: Optional[float] = Field(None, le=200)
+    color: Optional[str] = Field(None, max_length=50)
+    description: Optional[str] = Field(None, max_length=2000)
+    location_name: Optional[str] = Field(None, max_length=200)
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
     last_seen_location: Optional[PostLocationDTO] = None
     images: Optional[List[str]] = Field(None, min_items=1, max_items=10)
     status: Optional[str] = Field(None, pattern="^(active|found|closed)$")
 
+    @field_validator('contact_phone')
+    @classmethod
+    def validate_contact_phone(cls, v):
+        if v is not None and v.strip() and v.strip().lower() != 'string' and not v.startswith('+'):
+            raise ValueError('Contact phone must start with +')
+        return v if v and v.strip() and v.strip().lower() != 'string' else None
+
+    @field_validator('gender')
+    @classmethod
+    def validate_gender(cls, v):
+        if v is not None and v.strip() and v.strip().lower() != 'string' and v not in ['male', 'female', 'unknown']:
+            raise ValueError('Gender must be male, female, or unknown')
+        return v if v and v.strip() and v.strip().lower() != 'string' else None
+
+    @field_validator('weight')
+    @classmethod
+    def validate_weight(cls, v):
+        if v is not None:
+            # Если это строка и она равна 'string' или пустая - возвращаем None
+            if isinstance(v, str) and (v.strip().lower() == 'string' or not v.strip()):
+                return None
+            # Если это число и оно меньше 0 - возвращаем None
+            if isinstance(v, (int, float)) and v < 0:
+                return None
+        return v
+
+    @field_validator('age')
+    @classmethod
+    def validate_age(cls, v):
+        if v is not None:
+            # Если это строка и она равна 'string' или пустая - возвращаем None
+            if isinstance(v, str) and (v.strip().lower() == 'string' or not v.strip()):
+                return None
+            # Если это число и оно меньше 0 - возвращаем None
+            if isinstance(v, (int, float)) and v < 0:
+                return None
+        return v
+
 
 class PostResponseDTO(BaseModel):
     id: uuid.UUID
-    pet_name: str
-    pet_species: str
-    pet_breed: str
-    age: int
-    gender: str
-    weight: float
-    color: str
-    description: str
-    location_name: str
-    contact_phone: str
-    last_seen_location: PostLocationDTO
-    images: List[str]
+    pet_name: Optional[str] = None
+    pet_species: Optional[str] = None
+    pet_breed: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    weight: Optional[float] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
+    location_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    last_seen_location: Optional[PostLocationDTO] = None
+    images: Optional[List[str]] = None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -160,16 +237,16 @@ class PostListResponseDTO(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    petName: Optional[str] = Field(None, min_length=1, max_length=100)
-    petSpecies: Optional[str] = Field(None, min_length=1, max_length=50)
-    petBreed: Optional[str] = Field(None, min_length=1, max_length=100)
-    age: Optional[str] = Field(None, min_length=1, max_length=50)
-    gender: Optional[str] = Field(None, min_length=1, max_length=20)
-    weight: Optional[str] = Field(None, min_length=1, max_length=50)
-    color: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, min_length=1, max_length=2000)
-    locationName: Optional[str] = Field(None, min_length=1, max_length=200)
-    contactPhone: Optional[str] = Field(None, min_length=1, max_length=20)
+    petName: Optional[str] = Field(None, max_length=100)
+    petSpecies: Optional[str] = Field(None, max_length=50)
+    petBreed: Optional[str] = Field(None, max_length=100)
+    age: Optional[str] = Field(None, max_length=50)
+    gender: Optional[str] = Field(None, max_length=20)
+    weight: Optional[str] = Field(None, max_length=50)
+    color: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=2000)
+    locationName: Optional[str] = Field(None, max_length=200)
+    contactPhone: Optional[str] = Field(None, max_length=20)
     lastSeenLocation: Optional[Coordinates] = None
     status: Optional[PostStatus] = None
 

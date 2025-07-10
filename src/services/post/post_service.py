@@ -26,6 +26,15 @@ class PostService:
     async def create_post(self, post_data: PostCreateDTO, user_id: uuid.UUID) -> PostResponseDTO:
         """Create new post"""
         
+        # Для координат устанавливаем значения по умолчанию, если не предоставлены
+        if post_data.last_seen_location:
+            last_seen_latitude = post_data.last_seen_location.latitude
+            last_seen_longitude = post_data.last_seen_location.longitude
+        else:
+            # Координаты тоже могут быть NULL
+            last_seen_latitude = None
+            last_seen_longitude = None
+        
         new_post = Post(
             pet_name=post_data.pet_name,
             pet_species=post_data.pet_species,
@@ -37,9 +46,9 @@ class PostService:
             description=post_data.description,
             location_name=post_data.location_name,
             contact_phone=post_data.contact_phone,
-            last_seen_latitude=post_data.last_seen_location.latitude,
-            last_seen_longitude=post_data.last_seen_location.longitude,
-            images=post_data.images,
+            last_seen_latitude=last_seen_latitude,
+            last_seen_longitude=last_seen_longitude,
+            images=post_data.images or [],
             user_id=user_id,
             status="active"
         )
@@ -292,6 +301,14 @@ class PostService:
         # Get like information
         likes_count, is_liked = await self.get_like_status(post.id, current_user_id)
         
+        # Create location DTO only if coordinates are present
+        location_dto = None
+        if post.last_seen_latitude is not None and post.last_seen_longitude is not None:
+            location_dto = PostLocationDTO(
+                latitude=post.last_seen_latitude,
+                longitude=post.last_seen_longitude
+            )
+        
         return PostResponseDTO(
             id=post.id,
             pet_name=post.pet_name,
@@ -304,10 +321,7 @@ class PostService:
             description=post.description,
             location_name=post.location_name,
             contact_phone=post.contact_phone,
-            last_seen_location=PostLocationDTO(
-                latitude=post.last_seen_latitude,
-                longitude=post.last_seen_longitude
-            ),
+            last_seen_location=location_dto,
             images=post.images,
             status=post.status,
             created_at=post.created_at,
