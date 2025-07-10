@@ -65,8 +65,6 @@ class UserService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found!"
             )
 
-        if user_data.username is not None:
-            user.username = user_data.username
         if user_data.phone is not None:
             user.phone = user_data.phone
 

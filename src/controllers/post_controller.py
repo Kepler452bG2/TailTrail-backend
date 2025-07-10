@@ -2,6 +2,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Query, status, HTTPException, Depends, UploadFile, File, Form
+from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from src.dependencies import DBSessionDep, CurrentUserDep
@@ -20,6 +21,7 @@ from src.schemas.post import (
 )
 from src.services.post.post_service import PostService
 from src.utils.upload.upload_service import get_upload_service
+from src.utils.exceptions import raise_validation_exception
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,8 +31,18 @@ router = APIRouter()
 
 @router.get('/{post_id}', status_code=200, response_model=PostResponseDTO)
 async def get_post(post_id: uuid.UUID, db: DBSessionDep, current_user: CurrentUserDep = None):
-    post_service = PostService(db)
-    return await post_service.get_post_by_id(post_id, current_user.id if current_user else None)
+    """Get post by ID"""
+    try:
+        post_service = PostService(db)
+        return await post_service.get_post_by_id(post_id, current_user.id if current_user else None)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting post: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting post: {e}"
+        )
 
 
 @router.get('/', status_code=200, response_model=PostListResponseDTO)
@@ -58,32 +70,45 @@ async def get_posts(
     search_longitude: Optional[float] = Query(None, ge=-180, le=180, description="Search longitude"),
     radius_km: Optional[float] = Query(None, ge=0.1, le=100, description="Search radius in km"),
 ):
-    filters = PostFiltersDTO(
-        pet_species=pet_species,
-        pet_breed=pet_breed,
-        gender=gender,
-        age_min=age_min,
-        age_max=age_max,
-        weight_min=weight_min,
-        weight_max=weight_max,
-        color=color,
-        location_name=location_name,
-        status=status,
-        user_id=user_id,
-        search_latitude=search_latitude,
-        search_longitude=search_longitude,
-        radius_km=radius_km
-    )
-    
-    pagination = PostPaginationDTO(
-        page=page,
-        per_page=per_page,
-        sort_by=sort_by,
-        sort_order=sort_order
-    )
-    
-    post_service = PostService(db)
-    return await post_service.get_posts_with_filters(filters, pagination, current_user.id if current_user else None)
+    """Get posts with filters and pagination"""
+    try:
+        filters = PostFiltersDTO(
+            pet_species=pet_species,
+            pet_breed=pet_breed,
+            gender=gender,
+            age_min=age_min,
+            age_max=age_max,
+            weight_min=weight_min,
+            weight_max=weight_max,
+            color=color,
+            location_name=location_name,
+            status=status,
+            user_id=user_id,
+            search_latitude=search_latitude,
+            search_longitude=search_longitude,
+            radius_km=radius_km
+        )
+        
+        pagination = PostPaginationDTO(
+            page=page,
+            per_page=per_page,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        post_service = PostService(db)
+        return await post_service.get_posts_with_filters(filters, pagination, current_user.id if current_user else None)
+    except ValidationError as e:
+        logger.error(f"Validation error in get_posts: {e}")
+        raise_validation_exception(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting posts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting posts: {e}"
+        )
 
 
 @router.post("/", 
@@ -202,14 +227,17 @@ async def create_post(
             failed_uploads=failed_uploads
         )
         
-    except HTTPException:
-        raise
+    except ValidationError as e:
+        logger.error(f"Validation error: {e}")
+        raise_validation_exception(e)
+    
     except Exception as e:
         logger.error(f"Error creating post with files: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating post with files"
+            detail=f"Error creating post with files: {e}"
         )
+    
 
 
 @router.patch('/{post_id}', status_code=200, response_model=PostResponseDTO)
@@ -219,8 +247,21 @@ async def update_post(
     db: DBSessionDep,
     current_user: CurrentUserDep
 ):
-    post_service = PostService(db)
-    return await post_service.update_post(post_id, post_data, current_user.id)
+    """Update post by ID"""
+    try:
+        post_service = PostService(db)
+        return await post_service.update_post(post_id, post_data, current_user.id)
+    except ValidationError as e:
+        logger.error(f"Validation error in update_post: {e}")
+        raise_validation_exception(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating post: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating post: {e}"
+        )
 
 
 @router.delete('/{post_id}', status_code=204)
@@ -229,12 +270,22 @@ async def delete_post(
     db: DBSessionDep,
     current_user: CurrentUserDep
 ):
-    post_service = PostService(db)
-    await post_service.delete_post(post_id, current_user.id)
-    return JSONResponse(
-        content={"detail": "Post successfully deleted"},
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    """Delete post by ID"""
+    try:
+        post_service = PostService(db)
+        await post_service.delete_post(post_id, current_user.id)
+        return JSONResponse(
+            content={"detail": "Post successfully deleted"},
+            status_code=status.HTTP_204_NO_CONTENT
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting post: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting post: {e}"
+            )
 
 
 @router.get('/my/posts', status_code=200, response_model=List[PostResponseDTO])
@@ -242,8 +293,18 @@ async def get_my_posts(
     db: DBSessionDep,
     current_user: CurrentUserDep
 ):
-    post_service = PostService(db)
-    return await post_service.get_user_posts(current_user.id, current_user.id)
+    """Get current user's posts"""
+    try:
+        post_service = PostService(db)
+        return await post_service.get_user_posts(current_user.id, current_user.id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user posts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting user posts: {e}"
+        )
 
 
 @router.get('/search/text', status_code=200, response_model=List[PostResponseDTO])
@@ -252,8 +313,18 @@ async def search_posts(
     db: DBSessionDep = DBSessionDep,
     current_user: CurrentUserDep = None
 ):
-    post_service = PostService(db)
-    return await post_service.search_posts(search_text, current_user.id if current_user else None)
+    """Search posts by text"""
+    try:
+        post_service = PostService(db)
+        return await post_service.search_posts(search_text, current_user.id if current_user else None)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching posts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error searching posts: {e}"
+        )
 
 
 @router.patch('/{post_id}/status', status_code=200, response_model=PostResponseDTO)
@@ -263,8 +334,18 @@ async def change_post_status(
     db: DBSessionDep = DBSessionDep,
     current_user: CurrentUserDep = CurrentUserDep
 ):
-    post_service = PostService(db)
-    return await post_service.change_post_status(post_id, new_status, current_user.id)
+    """Change post status"""
+    try:
+        post_service = PostService(db)
+        return await post_service.change_post_status(post_id, new_status, current_user.id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing post status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error changing post status: {e}"
+        )
 
 
 # Новые роуты для лайков
@@ -275,8 +356,17 @@ async def toggle_like(
     current_user: CurrentUserDep
 ):
     """Toggle like on a post (like if not liked, unlike if liked)"""
-    post_service = PostService(db)
-    return await post_service.toggle_like(post_id, current_user.id)
+    try:
+        post_service = PostService(db)
+        return await post_service.toggle_like(post_id, current_user.id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling like: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error toggling like: {e}"
+        )
 
 
 @router.get('/{post_id}/likes', status_code=200)
@@ -285,16 +375,21 @@ async def get_like_status(
     db: DBSessionDep,
     current_user: CurrentUserDep = None
 ):
-    """Get like count and status for a post"""
-    post_service = PostService(db)
-    likes_count, is_liked = await post_service.get_like_status(
-        post_id, 
-        current_user.id if current_user else None
-    )
-    
-    return {
-        "post_id": post_id,
-        "likes_count": likes_count,
-        "is_liked": is_liked
-    }
+    """Get like status for a post"""
+    try:
+        post_service = PostService(db)
+        likes_count, is_liked = await post_service.get_like_status(post_id, current_user.id if current_user else None)
+        return {
+            "post_id": post_id,
+            "likes_count": likes_count,
+            "is_liked": is_liked
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting like status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting like status: {e}"
+        )
 

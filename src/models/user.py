@@ -35,6 +35,12 @@ class User(Base):
     def check_password(self, raw_password: str) -> bool:
         return bcrypt.checkpw(raw_password.encode(), self._hashed_password.encode())
 
+    def set_password(self, raw_password: str) -> None:
+        """Set new password for user"""
+        self._hashed_password = bcrypt.hashpw(
+            raw_password.encode(), bcrypt.gensalt()
+        ).decode()
+
     @staticmethod
     def create_user(user_data: UserSignUpDTO) -> "User":
         return User(
