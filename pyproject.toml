@@ -23,6 +23,9 @@ dependencies = [
     "pydantic[email]==2.10.6",
     "boto3>=1.39.3",
     "python-multipart>=0.0.20",
+    "aiohttp>=3.12.14",
+    "google-generativeai==0.8.3",
+    "pillow==10.4.0",
 ]
 
 [project.optional-dependencies]

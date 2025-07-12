@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     AWS_CLOUDFRONT_URL: Optional[str] = None
 
+    GEMINI_API_KEY: Optional[str] = None
+
     @model_validator(mode="after")
     def fill_database_url(self):
         if not self.DATABASE_URL:

@@ -21,7 +21,8 @@ from src.schemas.post import (
 )
 from src.services.post.post_service import PostService
 from src.utils.upload.upload_service import get_upload_service
-from src.utils.exceptions import raise_validation_exception
+from src.utils.llm.gemini import validate_uploaded_files
+from utils.exceptions.exceptions import raise_validation_exception
 import logging
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,6 @@ async def create_post(
                 longitude=coordinates.lng
             )
         
-        # Создаем пост без значений по умолчанию - пустые значения будут NULL
         post_dto = PostCreateDTO(
             pet_name=petName if petName and petName.strip() else None,
             pet_species=petSpecies if petSpecies and petSpecies.strip() else None,
@@ -189,6 +189,9 @@ async def create_post(
         failed_uploads = []
         
         if files and len(files) > 0 and files[0] and files[0].filename: 
+            # Анализ изображений с помощью Gemini
+            await validate_uploaded_files(files)
+            
             upload_service = get_upload_service()
             
             for file in files:
@@ -230,6 +233,10 @@ async def create_post(
     except ValidationError as e:
         logger.error(f"Validation error: {e}")
         raise_validation_exception(e)
+    
+    except HTTPException:
+        # Передаем HTTPException без изменений (включая ошибки Gemini валидации)
+        raise
     
     except Exception as e:
         logger.error(f"Error creating post with files: {e}")

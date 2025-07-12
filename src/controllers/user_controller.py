@@ -12,7 +12,7 @@ from src.schemas.user import UserDTO, UserUpdateDTO
 from src.services.post.post_service import PostService
 from src.services.user.user_service import UserService
 from src.utils.upload.upload_service import get_upload_service
-from src.utils.exceptions import raise_validation_exception
+from utils.exceptions.exceptions import raise_validation_exception
 
 logger = logging.getLogger(__name__)
 
