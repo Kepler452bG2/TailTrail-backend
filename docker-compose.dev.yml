@@ -5,17 +5,6 @@ services:
       dockerfile: docker/Dockerfile.dev
     ports:
       - "8080:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/tailtrail_db
-      SECRET_KEY: your-secret-key-for-development-only
-      JWT_EXPIRATION: 86400  # 24 hours in seconds
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASS: postgres
-      DB_NAME: tailtrail_db
-      ECHO_SQL: "true"
-      DEBUG_LOGS: "true"
     volumes:
       - .:/app
       - /app/.venv  # Exclude the .venv directory from host mount

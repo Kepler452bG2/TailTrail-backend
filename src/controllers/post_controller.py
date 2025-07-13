@@ -17,12 +17,14 @@ from src.schemas.post import (
     PostPaginationDTO,
     PostCreateWithFiles,
     PostUploadResponse,
-    LikeResponseDTO
+    LikeResponseDTO,
+    ComplaintRequestDTO,
+    ComplaintResponseDTO
 )
 from src.services.post.post_service import PostService
 from src.utils.upload.upload_service import get_upload_service
 from src.utils.llm.gemini import validate_uploaded_files
-from utils.exceptions.exceptions import raise_validation_exception
+from src.utils.exceptions.exceptions import raise_validation_exception
 import logging
 
 logger = logging.getLogger(__name__)
@@ -399,4 +401,30 @@ async def get_like_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting like status: {e}"
         )
+        
 
+@router.post('/{post_id}/complaint', status_code=200, response_model=ComplaintResponseDTO)
+async def create_complaint(
+    post_id: uuid.UUID,
+    complaint_data: ComplaintRequestDTO,
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Create complaint for a post"""
+    try:
+        post_service = PostService(db)
+        result = await post_service.send_complaint(post_id, complaint_data.complaint, current_user.id)
+        
+        return ComplaintResponseDTO(
+            success=result["success"],
+            message=result["message"]
+        )
+                    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating complaint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating complaint: {e}"
+        )

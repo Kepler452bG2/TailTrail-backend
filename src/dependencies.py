@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db_session
 from src.models.user import User
 from src.repositories.user_repository import UserRepository
-from utils.token.auth.token_util import verify_token
+from src.utils.token.auth.token_util import verify_token
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 

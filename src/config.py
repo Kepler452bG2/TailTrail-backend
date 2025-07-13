@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: Optional[str] = None
 
+    COMPLAINT_SERVICE_URL: Optional[str] = None
+    
     @model_validator(mode="after")
     def fill_database_url(self):
         if not self.DATABASE_URL:

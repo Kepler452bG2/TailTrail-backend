@@ -28,6 +28,14 @@ dependencies = [
     "pillow==10.4.0",
 ]
 
+[tool.uv.scripts]
+dev = "uvicorn src.app:app --reload --host 0.0.0.0 --port 8000"
+test = "pytest -v"
+test-cov = "pytest --cov=src --cov-report=html"
+lint = "flake8 src tests"
+format = "black src tests"
+typecheck = "mypy src"
+
 [project.optional-dependencies]
 dev = [
     "pytest==8.3.5"
@@ -36,3 +44,17 @@ dev = [
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.21.0",
+    "black>=25.1.0",
+    "flake8>=7.3.0",
+    "httpx>=0.28.1",
+    "mypy>=1.16.1",
+    "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+]

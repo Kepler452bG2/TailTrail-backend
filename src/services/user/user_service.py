@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import User
 
-from utils.token.auth.token_util import generate_token
+from src.utils.token.auth.token_util import generate_token
 
 from src.repositories.user_repository import UserRepository
 from src.schemas.user import (
