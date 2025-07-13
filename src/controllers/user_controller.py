@@ -8,9 +8,18 @@ from starlette.responses import JSONResponse
 
 from src.dependencies import CurrentUserDep, DBSessionDep
 from src.schemas.post import PostResponseDTO
-from src.schemas.user import UserDTO, UserUpdateDTO
+from src.schemas.user import (
+    UserDTO, 
+    UserUpdateDTO,
+    UserBlockCreateDTO,
+    UserBlockResponseDTO,
+    UserBlockListResponseDTO,
+    UserBlockStatusDTO,
+    UserBlockActionResponseDTO
+)
 from src.services.post.post_service import PostService
 from src.services.user.user_service import UserService
+from src.services.user.user_block_service import UserBlockService
 from src.utils.upload.upload_service import get_upload_service
 from src.utils.exceptions.exceptions import raise_validation_exception
 
@@ -170,11 +179,25 @@ async def get_user_posts(
 @router.get('/{user_id}', status_code=200, response_model=UserDTO)
 async def get_user_by_id(
     db: DBSessionDep,
-    user_id: uuid.UUID
+    user_id: uuid.UUID,
+    current_user: CurrentUserDep = None
 ):
+    """Получить профиль пользователя с проверкой блокировки"""
     try:
         user_service = UserService(db)
+        user_block_service = UserBlockService(db)
+        
+        # Получаем пользователя
         user = await user_service.get_user_by_id(user_id)
+        
+        # Проверяем, заблокирован ли текущий пользователь этим пользователем
+        if current_user and current_user.id != user_id:
+            is_blocked = await user_block_service.is_user_blocked(user_id, current_user.id)
+            if is_blocked:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="Вы не можете просматривать профиль этого пользователя"
+                )
         
         return UserDTO(
             id=user.id,
@@ -190,6 +213,85 @@ async def get_user_by_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting user by ID: {e}"
+        )
+
+
+@router.post("/block", status_code=200, response_model=UserBlockActionResponseDTO)
+async def block_user(
+    user_data: UserBlockCreateDTO,
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Заблокировать пользователя"""
+    try:
+        user_block_service = UserBlockService(db)
+        return await user_block_service.block_user(current_user.id, user_data.blocked_user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error blocking user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error blocking user: {e}"
+        )
+
+
+@router.delete("/unblock/{user_id}", status_code=200, response_model=UserBlockActionResponseDTO)
+async def unblock_user(
+    user_id: uuid.UUID,
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Разблокировать пользователя"""
+    try:
+        user_block_service = UserBlockService(db)
+        return await user_block_service.unblock_user(current_user.id, user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unblocking user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error unblocking user: {e}"
+        )
+
+
+@router.get("/blocked-users", status_code=200, response_model=UserBlockListResponseDTO)
+async def get_blocked_users(
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Получить список заблокированных пользователей"""
+    try:
+        user_block_service = UserBlockService(db)
+        return await user_block_service.get_blocked_users(current_user.id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting blocked users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting blocked users: {e}"
+        )
+
+
+@router.get("/block-status/{user_id}", status_code=200, response_model=UserBlockStatusDTO)
+async def get_block_status(
+    user_id: uuid.UUID,
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    """Получить статус блокировки пользователя"""
+    try:
+        user_block_service = UserBlockService(db)
+        return await user_block_service.check_block_status(current_user.id, user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting block status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting block status: {e}"
         )
 
 

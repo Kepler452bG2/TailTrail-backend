@@ -73,3 +73,39 @@ class UserUpdateDTO(BaseModel):
 
         return self
 
+
+# Схемы для блокировки пользователей
+class UserBlockCreateDTO(BaseModel):
+    """DTO для создания блокировки пользователя"""
+    blocked_user_id: uuid.UUID = Field(..., description="ID пользователя, которого нужно заблокировать")
+
+
+class UserBlockResponseDTO(BaseModel):
+    """DTO для ответа о блокировке пользователя"""
+    id: uuid.UUID
+    blocker_id: uuid.UUID
+    blocked_id: uuid.UUID
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class UserBlockListResponseDTO(BaseModel):
+    """DTO для списка заблокированных пользователей"""
+    blocked_users: list[UserBlockResponseDTO]
+    total: int
+
+
+class UserBlockStatusDTO(BaseModel):
+    """DTO для статуса блокировки"""
+    is_blocked: bool
+    blocked_at: datetime | None = None
+    
+    
+class UserBlockActionResponseDTO(BaseModel):
+    """DTO для ответа на действие блокировки/разблокировки"""
+    success: bool
+    message: str
+    is_blocked: bool
+

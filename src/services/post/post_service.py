@@ -11,6 +11,7 @@ from src.config import settings
 from src.models.post import Post
 from src.repositories.post_repository import PostRepository
 from src.services.user.user_service import UserService
+from src.services.user.user_block_service import UserBlockService
 from src.schemas.post import (
     PostCreateDTO,
     PostUpdateDTO,
@@ -26,6 +27,7 @@ from src.schemas.post import (
 class PostService:
     def __init__(self, db: AsyncSession):
         self.post_repository = PostRepository(db)
+        self.user_block_service = UserBlockService(db)
 
     async def create_post(self, post_data: PostCreateDTO, user_id: uuid.UUID) -> PostResponseDTO:
         """Create new post"""
@@ -86,18 +88,21 @@ class PostService:
             filters, pagination
         )
         
+        # Фильтруем посты от заблокированных пользователей
+        filtered_posts = await self._filter_blocked_users_posts(posts, current_user_id)
+        
         total_pages = math.ceil(total_count / pagination.per_page)
         has_next = pagination.page < total_pages
         has_prev = pagination.page > 1
         
         post_dtos = []
-        for post in posts:
+        for post in filtered_posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
             post_dtos.append(post_dto)
         
         return PostListResponseDTO(
             posts=post_dtos,
-            total=total_count,
+            total=len(filtered_posts),
             page=pagination.page,
             per_page=pagination.per_page,
             total_pages=total_pages,
@@ -192,8 +197,12 @@ class PostService:
 
     async def search_posts(self, search_text: str, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
         posts = await self.post_repository.search_by_text(search_text)
+        
+        # Фильтруем посты от заблокированных пользователей
+        filtered_posts = await self._filter_blocked_users_posts(posts, current_user_id)
+        
         post_dtos = []
-        for post in posts:
+        for post in filtered_posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
             post_dtos.append(post_dto)
         return post_dtos
@@ -373,3 +382,19 @@ class PostService:
                         
         except Exception as e:
             return {"success": False, "message": f"Ошибка соединения: {str(e)}"}
+    
+    async def _filter_blocked_users_posts(self, posts: List[Post], current_user_id: Optional[uuid.UUID] = None) -> List[Post]:
+        """Фильтрует посты от заблокированных пользователей"""
+        if not current_user_id:
+            return posts
+        
+        # Получаем ID заблокированных пользователей
+        blocked_user_ids = await self.user_block_service.get_blocked_user_ids(current_user_id)
+        
+        # Фильтруем посты
+        filtered_posts = []
+        for post in posts:
+            if post.user_id not in blocked_user_ids:
+                filtered_posts.append(post)
+        
+        return filtered_posts

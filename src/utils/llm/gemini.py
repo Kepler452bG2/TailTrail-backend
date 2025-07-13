@@ -15,8 +15,8 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
-class GeminiImageAnalyzer:
-    """Сервис для анализа изображений через Gemini API на предмет сенситивного контента"""
+class GeminiContentAnalyzer:
+    """Сервис для анализа изображений и текста через Gemini API на предмет сенситивного контента"""
     
     def __init__(self):
         if not settings.GEMINI_API_KEY:
@@ -361,13 +361,184 @@ class GeminiImageAnalyzer:
             # Не блокируем загрузку при ошибке анализа (fail-safe)
             logger.warning("Продолжаем загрузку несмотря на ошибку анализа")
 
+    async def analyze_text_content(self, text: str) -> Dict[str, Any]:
+        """
+        Анализирует текст на предмет неприемлемого контента
+        
+        Args:
+            text: Текст для анализа
+            
+        Returns:
+            Dict с результатами анализа:
+            {
+                "status": "SAFE" | "SENSITIVE",
+                "confidence": float,
+                "details": str,
+                "categories": List[str]
+            }
+        """
+        try:
+            if not text or len(text.strip()) == 0:
+                return {
+                    "status": "SAFE",
+                    "confidence": 1.0,
+                    "details": "Пустой текст",
+                    "categories": [],
+                    "raw_response": "Empty text"
+                }
+            
+            # Создаем промпт для анализа текста
+            prompt = f"""
+            Ты модератор контента для платформы поиска потерянных домашних животных.
+            
+            Проанализируй следующий текст и определи, подходит ли он для семейной платформы поиска животных.
+            
+            ОБЫЧНЫЕ ОПИСАНИЯ ЖИВОТНЫХ ВСЕГДА БЕЗОПАСНЫ:
+            - Описания внешности животных (цвет, размер, порода)
+            - Контактная информация (телефон, адрес)
+            - Описания поведения животных
+            - Просьбы о помощи в поиске
+            - Благодарности за помощь
+            
+            БЛОКИРУЙ ТОЛЬКО ЯВНО НЕПОДХОДЯЩИЙ КОНТЕНТ:
+            - Откровенная порнография или сексуальный контент
+            - Экстремальное насилие или жестокость
+            - Наркотики или незаконные вещества
+            - Языки вражды или дискриминация
+            - Мошенничество или спам
+            - Угрозы или домогательства
+            
+            ВАЖНО: Если это обычное описание животного или просьба о помощи - это ВСЕГДА безопасно!
+            
+            Текст для анализа:
+            "{text}"
+            
+            Ответь ТОЛЬКО одним словом:
+            - SAFE - если это нормальное описание/просьба о помощи с животным
+            - SENSITIVE - только если есть явно неподходящий контент
+            
+            Не объясняй, просто ответь одним словом.
+            """
+            
+            # Выполняем синхронный запрос в отдельном потоке
+            @self._sync_to_async
+            def _generate_content():
+                return self.model.generate_content(
+                    prompt,
+                    safety_settings=self.safety_settings
+                )
+            
+            response = await _generate_content()
+            
+            # Обрабатываем ответ
+            if response.candidates and response.candidates[0].content:
+                content_text = response.candidates[0].content.parts[0].text.strip().upper()
+                
+                # Простая и четкая обработка ответа
+                if "SENSITIVE" in content_text:
+                    return {
+                        "status": "SENSITIVE",
+                        "confidence": 0.8,
+                        "details": "Обнаружен неподходящий контент в тексте",
+                        "categories": ["text_content"],
+                        "raw_response": content_text
+                    }
+                else:
+                    # По умолчанию считаем безопасным (включая "SAFE" и любые другие ответы)
+                    return {
+                        "status": "SAFE",
+                        "confidence": 0.9,
+                        "details": "Текст подходит для платформы поиска животных",
+                        "categories": [],
+                        "raw_response": content_text
+                    }
+            
+            # Проверяем safety ratings только для критических случаев
+            if response.candidates and response.candidates[0].safety_ratings:
+                for rating in response.candidates[0].safety_ratings:
+                    # Блокируем только HIGH уровень опасности
+                    if rating.probability.name == "HIGH":
+                        return {
+                            "status": "SENSITIVE",
+                            "confidence": 0.7,
+                            "details": f"Обнаружен критический контент в тексте: {rating.category.name}",
+                            "categories": [rating.category.name],
+                            "raw_response": str(response.candidates[0].safety_ratings)
+                        }
+            
+            # По умолчанию безопасно
+            return {
+                "status": "SAFE",
+                "confidence": 0.9,
+                "details": "Текст прошел проверку и подходит для платформы",
+                "categories": [],
+                "raw_response": "Default safe response"
+            }
+            
+        except Exception as e:
+            logger.error(f"Ошибка при анализе текста: {str(e)}")
+            # В случае ошибки анализа, разрешаем текст (fail-safe)
+            
+            # Специальная обработка для ошибок времени Google API
+            if "time" in str(e).lower() or "request time" in str(e).lower():
+                logger.warning(f"Проблема с временными метками Google API при анализе текста: {str(e)}")
+                return {
+                    "status": "SAFE",
+                    "confidence": 0.5,
+                    "details": "Пропущен анализ текста из-за проблем с временными метками API",
+                    "categories": [],
+                    "raw_response": f"Time sync error: {str(e)}"
+                }
+            
+            return {
+                "status": "SAFE",
+                "confidence": 0.5,
+                "details": "Не удалось проанализировать текст, разрешено по умолчанию",
+                "categories": [],
+                "raw_response": f"Analysis error: {str(e)}"
+            }
+
+    async def validate_text_content(self, text: str) -> None:
+        """
+        Валидирует текст и выбрасывает исключение если контент неприемлемый
+        
+        Args:
+            text: Текст для проверки
+            
+        Raises:
+            HTTPException: Если обнаружен неподходящий контент
+        """
+        try:
+            result = await self.analyze_text_content(text)
+            
+            if result["status"] == "SENSITIVE":
+                logger.warning(f"Обнаружен неподходящий текстовый контент: {result['details']}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "message": "Обнаружен неподходящий контент в тексте",
+                        "details": result["details"],
+                        "categories": result["categories"]
+                    }
+                )
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Ошибка при валидации текста: {str(e)}")
+            # В случае ошибки валидации, пропускаем проверку (fail-safe)
+            pass
+
 
 # Создаем экземпляр анализатора
 try:
-    image_analyzer = GeminiImageAnalyzer()
+    content_analyzer = GeminiContentAnalyzer()
 except ValueError as e:
-    logger.warning(f"Не удалось инициализировать GeminiImageAnalyzer: {e}")
-    image_analyzer = None
+    logger.warning(f"Не удалось инициализировать GeminiContentAnalyzer: {e}")
+    content_analyzer = None
+
+# Совместимость с существующим кодом
+image_analyzer = content_analyzer
 
 
 async def validate_uploaded_files(files: List[UploadFile]) -> None:
@@ -380,8 +551,25 @@ async def validate_uploaded_files(files: List[UploadFile]) -> None:
     Raises:
         HTTPException: Если обнаружен неподходящий контент
     """
-    if image_analyzer is None:
+    if content_analyzer is None:
         logger.warning("Gemini анализатор не инициализирован, пропускаем проверку")
         return
         
-    await image_analyzer.validate_files_for_upload(files)
+    await content_analyzer.validate_files_for_upload(files)
+
+
+async def validate_text_content(text: str) -> None:
+    """
+    Удобная функция для валидации текста в контроллерах.
+    
+    Args:
+        text: Текст для проверки
+        
+    Raises:
+        HTTPException: Если обнаружен неподходящий контент
+    """
+    if content_analyzer is None:
+        logger.warning("Gemini анализатор не инициализирован, пропускаем проверку текста")
+        return
+        
+    await content_analyzer.validate_text_content(text)

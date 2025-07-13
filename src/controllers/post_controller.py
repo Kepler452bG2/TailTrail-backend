@@ -23,7 +23,7 @@ from src.schemas.post import (
 )
 from src.services.post.post_service import PostService
 from src.utils.upload.upload_service import get_upload_service
-from src.utils.llm.gemini import validate_uploaded_files
+from src.utils.llm.gemini import validate_uploaded_files, validate_text_content
 from src.utils.exceptions.exceptions import raise_validation_exception
 import logging
 
@@ -66,7 +66,7 @@ async def get_posts(
     weight_max: Optional[float] = Query(None, le=200, description="Maximum weight"),
     color: Optional[str] = Query(None, description="Pet color"),
     location_name: Optional[str] = Query(None, description="Location name"),
-    status: Optional[str] = Query(None, description="Post status"),
+    post_status: Optional[str] = Query(None, description="Post status"),
     user_id: Optional[uuid.UUID] = Query(None, description="User ID"),
     
     search_latitude: Optional[float] = Query(None, ge=-90, le=90, description="Search latitude"),
@@ -85,7 +85,7 @@ async def get_posts(
             weight_max=weight_max,
             color=color,
             location_name=location_name,
-            status=status,
+            status=post_status,
             user_id=user_id,
             search_latitude=search_latitude,
             search_longitude=search_longitude,
@@ -190,6 +190,23 @@ async def create_post(
         uploaded_files = []
         failed_uploads = []
         
+        # Проверка текстового контента с помощью Gemini
+        text_parts = []
+        if post_dto.pet_name:
+            text_parts.append(f"Имя: {post_dto.pet_name}")
+        if post_dto.description:
+            text_parts.append(f"Описание: {post_dto.description}")
+        if post_dto.location_name:
+            text_parts.append(f"Местоположение: {post_dto.location_name}")
+        if post_dto.pet_species:
+            text_parts.append(f"Вид: {post_dto.pet_species}")
+        if post_dto.pet_breed:
+            text_parts.append(f"Порода: {post_dto.pet_breed}")
+        
+        if text_parts:
+            combined_text = "\n".join(text_parts)
+            await validate_text_content(combined_text)
+        
         if files and len(files) > 0 and files[0] and files[0].filename: 
             # Анализ изображений с помощью Gemini
             await validate_uploaded_files(files)
@@ -258,6 +275,23 @@ async def update_post(
 ):
     """Update post by ID"""
     try:
+        # Проверка текстового контента с помощью Gemini
+        text_parts = []
+        if post_data.pet_name:
+            text_parts.append(f"Имя: {post_data.pet_name}")
+        if post_data.description:
+            text_parts.append(f"Описание: {post_data.description}")
+        if post_data.location_name:
+            text_parts.append(f"Местоположение: {post_data.location_name}")
+        if post_data.pet_species:
+            text_parts.append(f"Вид: {post_data.pet_species}")
+        if post_data.pet_breed:
+            text_parts.append(f"Порода: {post_data.pet_breed}")
+        
+        if text_parts:
+            combined_text = "\n".join(text_parts)
+            await validate_text_content(combined_text)
+        
         post_service = PostService(db)
         return await post_service.update_post(post_id, post_data, current_user.id)
     except ValidationError as e:
@@ -412,6 +446,9 @@ async def create_complaint(
 ):
     """Create complaint for a post"""
     try:
+        # Проверка текста жалобы с помощью Gemini
+        await validate_text_content(complaint_data.complaint)
+        
         post_service = PostService(db)
         result = await post_service.send_complaint(post_id, complaint_data.complaint, current_user.id)
         
