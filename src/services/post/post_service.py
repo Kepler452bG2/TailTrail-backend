@@ -83,7 +83,7 @@ class PostService:
         current_user_id: Optional[uuid.UUID] = None
     ) -> PostListResponseDTO:
         posts, total_count = await self.post_repository.find_with_filters_and_pagination(
-            filters, pagination
+            filters, pagination, current_user_id
         )
         
         total_pages = math.ceil(total_count / pagination.per_page)
@@ -183,7 +183,7 @@ class PostService:
             )
 
     async def get_user_posts(self, user_id: uuid.UUID, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
-        posts = await self.post_repository.find_by_user_id(user_id)
+        posts = await self.post_repository.find_by_user_id(user_id, current_user_id)
         post_dtos = []
         for post in posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
@@ -191,7 +191,7 @@ class PostService:
         return post_dtos
 
     async def search_posts(self, search_text: str, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
-        posts = await self.post_repository.search_by_text(search_text)
+        posts = await self.post_repository.search_by_text(search_text, current_user_id)
         post_dtos = []
         for post in posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
