@@ -55,9 +55,6 @@ class ChatService:
         if not created_chat:
             raise HTTPException(status_code=500, detail="Failed to create chat")
         
-        # Set participants manually to avoid lazy loading issues
-        created_chat.participants = participants
-        
         return await self._convert_to_response_dto(created_chat, creator_id)
 
     async def get_user_chats(self, user_id: UUID) -> List[ChatResponseDTO]:
@@ -110,9 +107,14 @@ class ChatService:
 
     async def _convert_to_response_dto(self, chat: Chat, user_id: UUID) -> ChatResponseDTO:
         """Конвертировать чат в DTO"""
+        # Загружаем чат с participants чтобы избежать lazy loading  
+        chat_with_participants = await self.chat_repository.get_chat_with_participants(chat.id)
+        if not chat_with_participants:
+            chat_with_participants = chat
+            
         # Получаем участников
         participants = []
-        for participant in chat.participants:
+        for participant in chat_with_participants.participants:
             participants.append(ChatParticipantDTO(
                 id=participant.id,
                 email=participant.email,

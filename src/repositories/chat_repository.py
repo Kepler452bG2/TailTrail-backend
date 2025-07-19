@@ -76,4 +76,14 @@ class ChatRepository(BaseRepository[Chat]):
             .where(and_(Chat.id == chat_id, User.id == user_id))
         )
         result = await self.session.execute(query)
-        return result.scalar_one_or_none() is not None 
+        return result.scalar_one_or_none() is not None
+    
+    async def get_chat_with_participants(self, chat_id: UUID) -> Optional[Chat]:
+        """Получить чат с участниками"""
+        query = (
+            select(Chat)
+            .where(Chat.id == chat_id)
+            .options(selectinload(Chat.participants))
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none() 

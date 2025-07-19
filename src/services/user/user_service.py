@@ -56,8 +56,8 @@ class UserService:
         if user:
             user.is_online = is_online
             if not is_online:
-                user.last_seen = datetime.utcnow()
-            await self.user_repository.update(user)
+                user.last_seen = datetime.now()
+            await self.user_repository.update_one(user)
 
     async def get_online_users(self) -> list[User]:
         """Получить список онлайн пользователей"""

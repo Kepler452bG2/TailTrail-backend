@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Dict, List, Set
 from uuid import UUID
 from datetime import datetime
@@ -20,6 +21,7 @@ class WebSocketManager:
         self.chat_users: Dict[UUID, Set[UUID]] = {}
         # Словарь для хранения статуса "печатает": chat_id -> Set[user_id]
         self.typing_users: Dict[UUID, Set[UUID]] = {}
+        self.logger = logging.getLogger(__name__)
 
     async def connect(self, websocket: WebSocket, user_id: UUID):
         """Подключить пользователя к веб-сокету"""
@@ -62,6 +64,7 @@ class WebSocketManager:
         if chat_id not in self.chat_users:
             self.chat_users[chat_id] = set()
         self.chat_users[chat_id].add(user_id)
+        self.logger.info(f"WebSocketManager: User {user_id} added to chat {chat_id}")
 
     async def leave_chat(self, user_id: UUID, chat_id: UUID):
         """Убрать пользователя из чата"""
@@ -74,10 +77,15 @@ class WebSocketManager:
         """Отправить сообщение конкретному пользователю"""
         if user_id in self.active_connections:
             try:
-                await self.active_connections[user_id].send_text(json.dumps(message))
-            except Exception:
+                self.logger.info(f"Sending WebSocket message to user {user_id}: {message}")
+                await self.active_connections[user_id].send_text(json.dumps(message, ensure_ascii=False))
+                self.logger.info(f"Successfully sent message to user {user_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to send message to user {user_id}: {e}")
                 # Если не удалось отправить, удаляем подключение
                 await self.disconnect(user_id)
+        else:
+            self.logger.warning(f"User {user_id} not in active connections, cannot send message")
 
     async def broadcast_to_chat(self, chat_id: UUID, message: dict, exclude_user: UUID = None):
         """Отправить сообщение всем пользователям в чате"""
@@ -88,9 +96,14 @@ class WebSocketManager:
         if chat_id not in self.chat_users:
             return
         
-        for user_id in self.chat_users[chat_id]:
+        # Создаем копию множества чтобы избежать ошибки "Set changed size during iteration"
+        users_copy = set(self.chat_users[chat_id])
+        self.logger.info(f"WebSocketManager: Broadcasting to {len(users_copy)} users in chat {chat_id}")
+        for user_id in users_copy:
             if exclude_user and user_id == exclude_user:
+                self.logger.info(f"Skipping excluded user {user_id}")
                 continue
+            self.logger.info(f"Sending message to user {user_id}")
             await self.send_message_to_user(user_id, message)
 
     async def handle_typing(self, user_id: UUID, chat_id: UUID, is_typing: bool):
