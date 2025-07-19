@@ -145,6 +145,30 @@ async def delete_profile_image(
         )
 
 
+@router.delete('/account', status_code=200)
+async def delete_account(
+    db: DBSessionDep,
+    current_user: CurrentUserDep
+):
+    try:
+        user_service = UserService(db)
+        await user_service.delete_user_by_id(current_user.id)
+        
+        return JSONResponse(
+            content={"detail": "Account deleted successfully"},
+            status_code=status.HTTP_200_OK
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting account: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting account: {e}"
+        )
+
+
 @router.get('/{user_id}/posts', status_code=200, response_model=List[PostResponseDTO])
 async def get_user_posts(
     db: DBSessionDep,
