@@ -20,8 +20,8 @@ from src.schemas.post import (
 
 
 class PostService:
-    def __init__(self, db: AsyncSession):
-        self.post_repository = PostRepository(db)
+    def __init__(self, session: AsyncSession):
+        self.post_repository = PostRepository(session)
 
     async def create_post(self, post_data: PostCreateDTO, user_id: uuid.UUID) -> PostResponseDTO:
         """Create new post"""

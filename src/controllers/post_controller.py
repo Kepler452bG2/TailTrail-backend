@@ -5,7 +5,10 @@ from fastapi import APIRouter, Query, status, HTTPException, Depends, UploadFile
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from src.dependencies import DBSessionDep, CurrentUserDep
+from src.dependencies import get_session, get_current_user
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.models import User
 from src.schemas.post import (
     Coordinates,
     PostCreateDTO,
@@ -30,10 +33,10 @@ router = APIRouter()
 
 
 @router.get('/{post_id}', status_code=200, response_model=PostResponseDTO)
-async def get_post(post_id: uuid.UUID, db: DBSessionDep, current_user: CurrentUserDep = None):
+async def get_post(post_id: uuid.UUID, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     """Get post by ID"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.get_post_by_id(post_id, current_user.id if current_user else None)
     except HTTPException:
         raise
@@ -47,8 +50,8 @@ async def get_post(post_id: uuid.UUID, db: DBSessionDep, current_user: CurrentUs
 
 @router.get('/', status_code=200, response_model=PostListResponseDTO)
 async def get_posts(
-    db: DBSessionDep,
-    current_user: CurrentUserDep = None,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     sort_by: str = Query("created_at", description="Sort field"),
@@ -96,7 +99,7 @@ async def get_posts(
             sort_order=sort_order
         )
         
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.get_posts_with_filters(filters, pagination, current_user.id if current_user else None)
     except ValidationError as e:
         logger.error(f"Validation error in get_posts: {e}")
@@ -117,8 +120,8 @@ async def get_posts(
              summary="Create lost pet post",
 )
 async def create_post(
-    db: DBSessionDep,
-    current_user: CurrentUserDep,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
     petName: Optional[str] = Form(None, 
                                  description="Pet name", 
                                  example="Ginger"),
@@ -218,7 +221,7 @@ async def create_post(
         # Устанавливаем загруженные файлы или пустой список
         post_dto.images = uploaded_files if uploaded_files else []
         
-        post_service = PostService(db)
+        post_service = PostService(session)
         post = await post_service.create_post(post_dto, current_user.id)
         
         return PostUploadResponse(
@@ -244,12 +247,12 @@ async def create_post(
 async def update_post(
     post_id: uuid.UUID,
     post_data: PostUpdateDTO,
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """Update post by ID"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.update_post(post_id, post_data, current_user.id)
     except ValidationError as e:
         logger.error(f"Validation error in update_post: {e}")
@@ -267,12 +270,12 @@ async def update_post(
 @router.delete('/{post_id}', status_code=204)
 async def delete_post(
     post_id: uuid.UUID,
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """Delete post by ID"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         await post_service.delete_post(post_id, current_user.id)
         return JSONResponse(
             content={"detail": "Post successfully deleted"},
@@ -290,12 +293,12 @@ async def delete_post(
 
 @router.get('/my/posts', status_code=200, response_model=List[PostResponseDTO])
 async def get_my_posts(
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """Get current user's posts"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.get_user_posts(current_user.id, current_user.id)
     except HTTPException:
         raise
@@ -310,12 +313,12 @@ async def get_my_posts(
 @router.get('/search/text', status_code=200, response_model=List[PostResponseDTO])
 async def search_posts(
     search_text: str = Query(..., min_length=2, description="Search text"),
-    db: DBSessionDep = DBSessionDep,
-    current_user: CurrentUserDep = None
+    session: AsyncSession = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Search posts by text"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.search_posts(search_text, current_user.id if current_user else None)
     except HTTPException:
         raise
@@ -331,12 +334,12 @@ async def search_posts(
 async def change_post_status(
     post_id: uuid.UUID,
     new_status: str = Query(..., pattern="^(active|found|closed)$", description="New status"),
-    db: DBSessionDep = DBSessionDep,
-    current_user: CurrentUserDep = CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """Change post status"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.change_post_status(post_id, new_status, current_user.id)
     except HTTPException:
         raise
@@ -352,12 +355,12 @@ async def change_post_status(
 @router.post('/{post_id}/like', status_code=200, response_model=LikeResponseDTO)
 async def toggle_like(
     post_id: uuid.UUID,
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """Toggle like on a post (like if not liked, unlike if liked)"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.toggle_like(post_id, current_user.id)
     except HTTPException:
         raise
@@ -372,12 +375,12 @@ async def toggle_like(
 @router.get('/{post_id}/likes', status_code=200)
 async def get_like_status(
     post_id: uuid.UUID,
-    db: DBSessionDep,
-    current_user: CurrentUserDep = None
+    session: AsyncSession = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Get like status for a post"""
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         likes_count, is_liked = await post_service.get_like_status(post_id, current_user.id if current_user else None)
         return {
             "post_id": post_id,

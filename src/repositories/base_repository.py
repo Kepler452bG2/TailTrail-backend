@@ -14,8 +14,9 @@ class BaseRepository(ABC, Generic[T]):
     model: type[T] = None
     dao_class = BaseDAO
 
-    def __init__(self, db: AsyncSession):
-        self.dao = self.dao_class(self.model, db)
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.dao = self.dao_class(self.model, session)
 
     async def find_by_id(self, _id: uuid.UUID) -> T | None:
         return await self.dao.find_by_id(_id)

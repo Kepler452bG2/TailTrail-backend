@@ -17,3 +17,4 @@ pyjwt==2.10.1
 pydantic[email]==2.10.6
 boto3==1.35.79
 python-multipart==0.0.12
+websockets==12.0

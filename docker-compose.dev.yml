@@ -8,7 +8,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/tailtrail_db
       SECRET_KEY: your-secret-key-for-development-only
-      JWT_EXPIRATION: 86400  # 24 hours in seconds
+      JWT_EXPIRATION: 86400
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: postgres
