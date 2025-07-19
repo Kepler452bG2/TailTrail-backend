@@ -236,6 +236,17 @@ class PostListResponseDTO(BaseModel):
     has_prev: bool
 
 
+class ComplaintRequestDTO(BaseModel):
+    """DTO for complaint request"""
+    complaint: str = Field(..., min_length=1, max_length=2000, description="Complaint text")
+
+
+class ComplaintResponseDTO(BaseModel):
+    """DTO for complaint response"""
+    success: bool
+    message: str
+
+
 class PostUpdate(BaseModel):
     petName: Optional[str] = Field(None, max_length=100)
     petSpecies: Optional[str] = Field(None, max_length=50)

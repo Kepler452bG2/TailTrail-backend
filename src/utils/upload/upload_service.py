@@ -15,11 +15,11 @@ class UploadService(BaseUploadService):
     """Сервис загрузки файлов в AWS S3"""
     
     def __init__(self):
-        """Инициализация S3 сервиса"""
+        """Инициализация сервиса загрузки"""
         if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
             raise ValueError("AWS credentials not configured")
         
-        self.bucket_name = getattr(settings, 'AWS_S3_BUCKET_NAME', 'tailtrail-uploads')
+        self.bucket_name = getattr(settings, 'AWS_S3_BUCKET_NAME', 'tail-trail-bucket')
         self.region_name = getattr(settings, 'AWS_REGION', 'us-east-1')
         self.base_url = f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com"
         
@@ -89,10 +89,26 @@ class UploadService(BaseUploadService):
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
             logger.error(f"AWS S3 error ({error_code}): {error_message}")
+            
+            # Специальная обработка ошибок времени
+            if "time" in error_message.lower() or "request time" in error_message.lower():
+                return UploadResult(
+                    success=False, 
+                    error="Ошибка синхронизации времени. Проверьте настройки времени системы."
+                )
+            
             return UploadResult(success=False, error=f"Ошибка загрузки файла: {error_message}")
             
         except Exception as e:
             logger.error(f"Unexpected error uploading file: {e}")
+            
+            # Проверяем ошибки времени в общих исключениях
+            if "time" in str(e).lower() or "request time" in str(e).lower():
+                return UploadResult(
+                    success=False,
+                    error="Ошибка синхронизации времени. Проверьте настройки времени системы."
+                )
+            
             return UploadResult(success=False, error=f"Неожиданная ошибка: {str(e)}")
     
     async def delete_file(self, file_url: str) -> bool:

@@ -4,12 +4,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from fastapi import HTTPException, status
 
-from sqlalchemy import select, and_, or_, func, desc, asc, delete
+from sqlalchemy import select, and_, or_, func, desc, asc, delete, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.dao.sqlalchemy_dao import SQLAlchemyDAO
 from src.models.post import Post
 from src.models.like import Like
+from src.models.block import Block
 from src.repositories.base_repository import BaseRepository
 from src.schemas.post import PostFiltersDTO, PostPaginationDTO, PostStatus
 
@@ -21,12 +22,18 @@ class PostRepository(BaseRepository[Post]):
     async def find_with_filters_and_pagination(
         self,
         filters: PostFiltersDTO,
-        pagination: PostPaginationDTO
+        pagination: PostPaginationDTO,
+        current_user_id: Optional[uuid.UUID] = None
     ) -> Tuple[Sequence[Post], int]:
         query = select(self.model)
         
         # Применяем фильтры
         conditions = []
+        
+        # Исключаем посты заблокированных пользователей
+        if current_user_id:
+            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+            conditions.append(not_(self.model.user_id.in_(blocked_subquery)))
         
         if filters.pet_species:
             conditions.append(self.model.pet_species.ilike(f"%{filters.pet_species}%"))
@@ -103,13 +110,21 @@ class PostRepository(BaseRepository[Post]):
         
         return posts, total_count
 
-    async def find_by_user_id(self, user_id: uuid.UUID) -> Sequence[Post]:
-        return await self.dao.find_all(user_id=user_id)
+    async def find_by_user_id(self, user_id: uuid.UUID, current_user_id: Optional[uuid.UUID] = None) -> Sequence[Post]:
+        query = select(self.model).where(self.model.user_id == user_id)
+        
+        # Исключаем посты заблокированных пользователей
+        if current_user_id:
+            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+            query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
+        
+        result = await self.dao.db.execute(query)
+        return result.scalars().all()
 
     async def find_active_posts(self) -> Sequence[Post]:
         return await self.dao.find_all(status="active")
 
-    async def search_by_text(self, search_text: str) -> Sequence[Post]:
+    async def search_by_text(self, search_text: str, current_user_id: Optional[uuid.UUID] = None) -> Sequence[Post]:
         query = select(self.model).where(
             or_(
                 self.model.pet_name.ilike(f"%{search_text}%"),
@@ -118,6 +133,11 @@ class PostRepository(BaseRepository[Post]):
                 self.model.location_name.ilike(f"%{search_text}%")
             )
         )
+        
+        # Исключаем посты заблокированных пользователей
+        if current_user_id:
+            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+            query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
         
         result = await self.dao.db.execute(query)
         return result.scalars().all()

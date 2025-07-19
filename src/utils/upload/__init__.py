@@ -4,7 +4,7 @@
 
 from .base_upload_service import BaseUploadService, UploadResult
 from .s3_upload_service import S3UploadService
-from .upload_service import UploadService, get_upload_service
+
 
 __all__ = [
     "BaseUploadService",

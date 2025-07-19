@@ -4,9 +4,13 @@ from typing import List, Dict, Any, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import aiohttp
+
+from src.config import settings
 
 from src.models.post import Post
 from src.repositories.post_repository import PostRepository
+from src.services.user.user_service import UserService
 from src.schemas.post import (
     PostCreateDTO,
     PostUpdateDTO,
@@ -79,7 +83,7 @@ class PostService:
         current_user_id: Optional[uuid.UUID] = None
     ) -> PostListResponseDTO:
         posts, total_count = await self.post_repository.find_with_filters_and_pagination(
-            filters, pagination
+            filters, pagination, current_user_id
         )
         
         total_pages = math.ceil(total_count / pagination.per_page)
@@ -179,7 +183,7 @@ class PostService:
             )
 
     async def get_user_posts(self, user_id: uuid.UUID, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
-        posts = await self.post_repository.find_by_user_id(user_id)
+        posts = await self.post_repository.find_by_user_id(user_id, current_user_id)
         post_dtos = []
         for post in posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
@@ -187,7 +191,7 @@ class PostService:
         return post_dtos
 
     async def search_posts(self, search_text: str, current_user_id: Optional[uuid.UUID] = None) -> List[PostResponseDTO]:
-        posts = await self.post_repository.search_by_text(search_text)
+        posts = await self.post_repository.search_by_text(search_text, current_user_id)
         post_dtos = []
         for post in posts:
             post_dto = await self._post_to_response_dto(post, current_user_id)
@@ -329,4 +333,43 @@ class PostService:
             user_id=post.user_id,
             likes_count=likes_count,
             is_liked=is_liked
-        ) 
+        )
+
+    async def send_complaint(self, post_id: uuid.UUID, complaint_text: str, user_id: uuid.UUID) -> dict:
+        """Send complaint to external service"""
+        # Проверяем, что пост существует
+        post = await self.post_repository.find_by_id(post_id)
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+
+        # Получаем данные пользователя
+        user_service = UserService(self.post_repository.dao.db)
+        user = await user_service.get_user_by_id(user_id)
+        
+        complaint_payload = {
+            "complaint": complaint_text,
+            "user_name": user.email if user.email else "Неизвестный",
+            "email": user.email if user.email else "Не указан",
+            "phone": user.phone if user.phone else "Не указан",
+            "post_id": str(post_id)
+        }
+        
+        # Отправляем жалобу на внешний сервер
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    settings.COMPLAINT_SERVICE_URL,
+                    json=complaint_payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        return {"success": True, "message": "Жалоба успешно отправлена"}
+                    else:
+                        return {"success": False, "message": f"Ошибка при отправке жалобы: {response.status}"}
+                        
+        except Exception as e:
+            return {"success": False, "message": f"Ошибка соединения: {str(e)}"}

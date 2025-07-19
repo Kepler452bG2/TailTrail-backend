@@ -12,11 +12,13 @@ from src.schemas.user import UserDTO, UserUpdateDTO
 from src.services.post.post_service import PostService
 from src.services.user.user_service import UserService
 from src.utils.upload.upload_service import get_upload_service
-from src.utils.exceptions import raise_validation_exception
+from src.utils.exceptions.exceptions import raise_validation_exception
+from src.controllers.block_controller import router as block_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(block_router, prefix="/block", tags=["block"])
 
 
 @router.get('/profile', status_code=200, response_model=UserDTO)

@@ -6,7 +6,8 @@ from starlette.responses import JSONResponse
 from src.dependencies import DBSessionDep
 from src.schemas.user import UserLogInDTO, UserSignUpDTO
 from src.services.user.user_service import UserService
-from src.utils.exceptions import raise_validation_exception
+from src.utils.exceptions.exceptions import raise_validation_exception
+from src.controllers.block_controller import router as block_router
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import bcrypt
 from sqlalchemy import UUID, DateTime, String, func, Boolean
@@ -8,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import Base
 from src.schemas.user import UserSignUpDTO
+
+if TYPE_CHECKING:
+    from .block import Block
 
 
 class User(Base):
@@ -27,6 +31,8 @@ class User(Base):
     # Relationships
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="user")
     likes: Mapped[list["Like"]] = relationship("Like", back_populates="user", cascade="all, delete-orphan")
+    blocks_made: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocker_id", back_populates="blocker", cascade="all, delete-orphan")
+    blocks_received: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocked_id", back_populates="blocked", cascade="all, delete-orphan")
 
     @hybrid_property
     def hashed_password(self) -> str:

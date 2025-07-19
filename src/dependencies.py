@@ -8,12 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db_session
 from src.models.user import User
 from src.repositories.user_repository import UserRepository
-from src.utils.token_util import verify_token
+from src.utils.token.auth.token_util import verify_token
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 security = HTTPBearer()
-
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],

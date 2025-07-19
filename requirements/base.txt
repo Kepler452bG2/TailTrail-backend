@@ -17,3 +17,6 @@ pyjwt==2.10.1
 pydantic[email]==2.10.6
 boto3==1.35.79
 python-multipart==0.0.12
+google-generativeai==0.8.3
+aiohttp==3.10.11
+Pillow==10.4.0
