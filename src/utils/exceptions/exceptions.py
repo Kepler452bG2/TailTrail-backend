@@ -2,6 +2,14 @@ from typing import Dict, List, Any
 from pydantic import ValidationError
 from fastapi import HTTPException, status
 
+__all__ = [
+    'HTTPException',
+    'format_validation_error',
+    'raise_validation_exception',
+    'format_custom_error', 
+    'raise_custom_exception'
+]
+
 
 def format_validation_error(validation_error: ValidationError) -> Dict[str, Any]:
     """Format Pydantic ValidationError into a structured response

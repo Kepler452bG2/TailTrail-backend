@@ -6,7 +6,7 @@ from starlette.responses import JSONResponse
 from src.dependencies import get_session
 from src.schemas.user import UserLogInDTO, UserSignUpDTO
 from src.services.user.user_service import UserService
-from src.utils.exceptions import raise_validation_exception
+from src.utils.exceptions.exceptions import raise_validation_exception
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 

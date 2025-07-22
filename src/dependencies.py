@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import sessionmanager, get_db_session
 from src.models import User
 from src.repositories.user_repository import UserRepository
-from src.utils.token.auth import verify_token
+from src.utils.token.auth.token_util import verify_token
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -104,10 +104,8 @@ async def get_current_user_websocket(websocket: WebSocket, user_id: UUID) -> Use
             
             return user
     except HTTPException:
-        # Re-raise HTTPExceptions (including JWT errors) without modification
         raise
     except Exception:
-        # Only catch non-HTTP exceptions for database errors, etc.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="WebSocket authentication failed"
