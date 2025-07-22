@@ -85,6 +85,12 @@ async def handle_websocket_message(websocket: WebSocket, user_id: UUID, message:
         elif message.type == "mark_read":
             logger.info("Routing to handle_mark_read")
             await handle_mark_read(user_id, message.data)
+        elif message.type == "get_my_chats":
+            logger.info("Routing to handle_get_my_chats")
+            await handle_get_my_chats(websocket, user_id)
+        elif message.type == "get_chat_status":
+            logger.info("Routing to handle_get_chat_status")
+            await handle_get_chat_status(websocket, user_id)
         else:
             logger.warning(f"Unknown message type: {message.type}")
             await websocket.send_text(json.dumps({
@@ -193,3 +199,83 @@ async def handle_mark_read(user_id: UUID, data: Dict[str, Any]):
             "type": "error",
             "data": {"message": f"Failed to mark messages as read: {str(e)}"}
         }) 
+
+
+async def handle_get_my_chats(websocket: WebSocket, user_id: UUID):
+    """Получить информацию о всех чатах пользователя"""
+    try:
+        # Получаем список чатов из WebSocketManager
+        user_chats = websocket_manager.get_user_chats_list(user_id)
+        
+        # Получаем детальную информацию о чатах
+        from src.database import sessionmanager
+        async with sessionmanager.session() as session:
+            chat_service = ChatService(session)
+            chats_info = await chat_service.get_user_chats(user_id)
+            
+            # Добавляем информацию о статусе подключения
+            chats_data = []
+            for chat in chats_info:
+                chat_dict = chat.model_dump(mode='json')
+                chat_dict['is_connected'] = chat.id in user_chats
+                chats_data.append(chat_dict)
+            
+            await websocket.send_text(json.dumps({
+                "type": "my_chats",
+                "data": {
+                    "chats": chats_data,
+                    "total_chats": len(chats_data)
+                }
+            }, ensure_ascii=False))
+            
+    except Exception as e:
+        logger.error(f"Error in handle_get_my_chats: {e}")
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "data": {"message": f"Failed to get chats: {str(e)}"}
+        }))
+
+
+async def handle_get_chat_status(websocket: WebSocket, user_id: UUID):
+    """Получить статус всех чатов (активность, новые сообщения и т.д.)"""
+    try:
+        user_chats = websocket_manager.get_user_chats_list(user_id)
+        
+        # Собираем информацию о каждом чате
+        chat_statuses = []
+        for chat_id in user_chats:
+            # Получаем пользователей онлайн в чате
+            online_users = []
+            if chat_id in websocket_manager.chat_users:
+                for online_user_id in websocket_manager.chat_users[chat_id]:
+                    if websocket_manager.is_user_online(online_user_id) and online_user_id != user_id:
+                        online_users.append(str(online_user_id))
+            
+            # Получаем кто печатает
+            typing_users = []
+            if chat_id in websocket_manager.typing_users:
+                for typing_user_id in websocket_manager.typing_users[chat_id]:
+                    if typing_user_id != user_id:
+                        typing_users.append(str(typing_user_id))
+            
+            chat_statuses.append({
+                "chat_id": str(chat_id),
+                "online_users": online_users,
+                "typing_users": typing_users,
+                "users_count": len(websocket_manager.chat_users.get(chat_id, set()))
+            })
+        
+        await websocket.send_text(json.dumps({
+            "type": "chat_status",
+            "data": {
+                "chats": chat_statuses,
+                "total_online_users": len(websocket_manager.get_online_users())
+            }
+        }, ensure_ascii=False))
+        
+    except Exception as e:
+        logger.error(f"Error in handle_get_chat_status: {e}")
+        await websocket.send_text(json.dumps({
+            "type": "error", 
+            "data": {"message": f"Failed to get chat status: {str(e)}"}
+        })) 
