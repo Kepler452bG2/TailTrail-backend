@@ -11,7 +11,8 @@ from . import Base
 from src.schemas.user import UserSignUpDTO
 
 if TYPE_CHECKING:
-    from .block import Block
+    from .chat import Chat, chat_participants
+    from .message import Message
 
 
 class User(Base):
@@ -27,12 +28,18 @@ class User(Base):
         DateTime, default=func.now(), nullable=False
     )
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    is_online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="user")
     likes: Mapped[list["Like"]] = relationship("Like", back_populates="user", cascade="all, delete-orphan")
-    blocks_made: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocker_id", back_populates="blocker", cascade="all, delete-orphan")
-    blocks_received: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocked_id", back_populates="blocked", cascade="all, delete-orphan")
+    chats: Mapped[list["Chat"]] = relationship(
+        "Chat", secondary="chat_participants", back_populates="participants"
+    )
+    messages: Mapped[list["Message"]] = relationship("Message", back_populates="sender")
 
     @hybrid_property
     def hashed_password(self) -> str:

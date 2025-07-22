@@ -6,28 +6,29 @@ from fastapi import APIRouter, status, HTTPException, UploadFile, File, Form
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from src.dependencies import CurrentUserDep, DBSessionDep
+from src.dependencies import get_session, get_current_user
 from src.schemas.post import PostResponseDTO
 from src.schemas.user import UserDTO, UserUpdateDTO
 from src.services.post.post_service import PostService
 from src.services.user.user_service import UserService
 from src.utils.upload.upload_service import get_upload_service
-from src.utils.exceptions.exceptions import raise_validation_exception
-from src.controllers.block_controller import router as block_router
+from src.utils.exceptions import raise_validation_exception
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.models import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-router.include_router(block_router, prefix="/block", tags=["block"])
 
 
 @router.get('/profile', status_code=200, response_model=UserDTO)
 async def get_current_user_profile(
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     try:
-        user_service = UserService(db)
+        user_service = UserService(session)
         user = await user_service.get_user_by_id(current_user.id)
         
         return UserDTO(
@@ -49,8 +50,8 @@ async def get_current_user_profile(
 
 @router.patch('/profile', status_code=200, response_model=UserDTO)
 async def update_user_profile(
-    db: DBSessionDep,
-    current_user: CurrentUserDep,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
     phone: Optional[str] = Form(None, description="Phone number"),
     current_password: Optional[str] = Form(None, description="Current password"),
     new_password: Optional[str] = Form(None, description="New password"),
@@ -58,7 +59,7 @@ async def update_user_profile(
 ):
     """Update user profile with optional image upload"""
     try:
-        user_service = UserService(db)
+        user_service = UserService(session)
         profile_image_url = None
         
         if profile_image and profile_image.filename:
@@ -125,11 +126,11 @@ async def update_user_profile(
 
 @router.delete('/profile/image', status_code=200)
 async def delete_profile_image(
-    db: DBSessionDep,
-    current_user: CurrentUserDep
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     try:
-        user_service = UserService(db)
+        user_service = UserService(session)
         await user_service.delete_profile_image(current_user.id)
         
         return JSONResponse(
@@ -147,38 +148,14 @@ async def delete_profile_image(
         )
 
 
-@router.delete('/account', status_code=200)
-async def delete_account(
-    db: DBSessionDep,
-    current_user: CurrentUserDep
-):
-    try:
-        user_service = UserService(db)
-        await user_service.delete_user_by_id(current_user.id)
-        
-        return JSONResponse(
-            content={"detail": "Account deleted successfully"},
-            status_code=status.HTTP_200_OK
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting account: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting account: {e}"
-        )
-
-
 @router.get('/{user_id}/posts', status_code=200, response_model=List[PostResponseDTO])
 async def get_user_posts(
-    db: DBSessionDep,
     user_id: uuid.UUID,
-    current_user: CurrentUserDep = None
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     try:
-        post_service = PostService(db)
+        post_service = PostService(session)
         return await post_service.get_user_posts(
             user_id=user_id, 
             current_user_id=current_user.id if current_user else None
@@ -195,11 +172,11 @@ async def get_user_posts(
 
 @router.get('/{user_id}', status_code=200, response_model=UserDTO)
 async def get_user_by_id(
-    db: DBSessionDep,
-    user_id: uuid.UUID
+    user_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session)
 ):
     try:
-        user_service = UserService(db)
+        user_service = UserService(session)
         user = await user_service.get_user_by_id(user_id)
         
         return UserDTO(
@@ -217,5 +194,4 @@ async def get_user_by_id(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting user by ID: {e}"
         )
-
 

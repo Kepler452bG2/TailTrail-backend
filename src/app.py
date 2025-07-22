@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
         await sessionmanager.close()
 
 
-app = FastAPI(lifespan=lifespan, title="Service API")
+app = FastAPI(lifespan=lifespan, title="TailTrail API")
 
 app.add_middleware(
     CORSMiddleware,

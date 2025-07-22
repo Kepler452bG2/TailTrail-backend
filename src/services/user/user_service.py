@@ -1,4 +1,6 @@
+from typing import Optional
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +18,9 @@ from src.schemas.user import (
 
 
 class UserService:
-    def __init__(self, db: AsyncSession):
-        self.user_repository = UserRepository(db)
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.user_repository = UserRepository(session)
 
     async def create_user(self, user_data: UserSignUpDTO) -> None:
         existing_user = await self.user_repository.find_one_or_none(
@@ -47,13 +50,24 @@ class UserService:
         token_payload = {"user_id": str(user.id)}
         return generate_token(token_payload)
 
-    async def get_user_by_id(self, user_id: UUID) -> User:
+    async def update_online_status(self, user_id: UUID, is_online: bool) -> None:
+        """Обновить статус пользователя онлайн/оффлайн"""
         user = await self.user_repository.find_by_id(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found!"
-            )
-        return user
+        if user:
+            user.is_online = is_online
+            if not is_online:
+                user.last_seen = datetime.now()
+            await self.user_repository.update_one(user)
+
+    async def get_online_users(self) -> list[User]:
+        """Получить список онлайн пользователей"""
+        # Этот метод может быть реализован через запрос к базе данных
+        # для получения пользователей где is_online = True
+        return await self.user_repository.get_online_users()
+
+    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
+        """Получить пользователя по ID"""
+        return await self.user_repository.find_by_id(user_id)
 
 
     async def update_user(
