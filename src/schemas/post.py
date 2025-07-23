@@ -216,6 +216,13 @@ class PostFiltersDTO(BaseModel):
     search_longitude: Optional[float] = Field(None, ge=-180, le=180)
     radius_km: Optional[float] = Field(None, ge=0.1, le=100)
 
+    @field_validator('user_id')
+    @classmethod
+    def validate_user_id(cls, v):
+        if v == "None" or v == "null" or v == "":
+            return None
+        return v
+
 
 class PostPaginationDTO(BaseModel):
     """DTO for pagination"""
