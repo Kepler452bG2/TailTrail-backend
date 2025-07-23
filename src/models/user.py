@@ -13,6 +13,7 @@ from src.schemas.user import UserSignUpDTO
 if TYPE_CHECKING:
     from .chat import Chat, chat_participants
     from .message import Message
+    from .block import Block
 
 
 class User(Base):
@@ -40,6 +41,8 @@ class User(Base):
         "Chat", secondary="chat_participants", back_populates="participants"
     )
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="sender")
+    blocks_made: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocker_id", back_populates="blocker")
+    blocks_received: Mapped[list["Block"]] = relationship("Block", foreign_keys="Block.blocked_id", back_populates="blocked")
 
     @hybrid_property
     def hashed_password(self) -> str:

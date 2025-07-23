@@ -11,4 +11,5 @@ from .post import Post
 from .like import Like
 from .chat import Chat
 from .message import Message
+from .block import Block
 

@@ -10,6 +10,9 @@ from src.config import settings
 from src.database import sessionmanager
 from src.routes import router as api_v1_router
 
+# Import models to ensure they are registered with SQLAlchemy
+from src.models import User, Post, Like, Chat, Message, Block
+
 logging.basicConfig(
     stream=sys.stdout, level=logging.DEBUG if settings.DEBUG_LOGS else logging.INFO
 )
