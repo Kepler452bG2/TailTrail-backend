@@ -69,7 +69,7 @@ async def get_posts(
     weight_max: Optional[float] = Query(None, le=200, description="Maximum weight"),
     color: Optional[str] = Query(None, description="Pet color"),
     location_name: Optional[str] = Query(None, description="Location name"),
-    status: Optional[str] = Query(None, description="Post status"),
+    post_status: Optional[str] = Query(None, description="Post status"),
     user_id: Optional[uuid.UUID] = Query(None, description="User ID"),
     
     search_latitude: Optional[float] = Query(None, ge=-90, le=90, description="Search latitude"),
@@ -88,7 +88,7 @@ async def get_posts(
             weight_max=weight_max,
             color=color,
             location_name=location_name,
-            status=status,
+            status=post_status,
             user_id=user_id,
             search_latitude=search_latitude,
             search_longitude=search_longitude,

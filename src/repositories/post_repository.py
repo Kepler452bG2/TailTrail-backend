@@ -32,8 +32,12 @@ class PostRepository(BaseRepository[Post]):
         
         # Исключаем посты заблокированных пользователей
         if current_user_id:
-            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
-            conditions.append(not_(self.model.user_id.in_(blocked_subquery)))
+            try:
+                blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+                conditions.append(not_(self.model.user_id.in_(blocked_subquery)))
+            except Exception:
+                # If blocks table doesn't exist yet, skip the blocking filter
+                pass
         
         if filters.pet_species:
             conditions.append(self.model.pet_species.ilike(f"%{filters.pet_species}%"))
@@ -115,8 +119,12 @@ class PostRepository(BaseRepository[Post]):
         
         # Исключаем посты заблокированных пользователей
         if current_user_id:
-            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
-            query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
+            try:
+                blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+                query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
+            except Exception:
+                # If blocks table doesn't exist yet, skip the blocking filter
+                pass
         
         result = await self.dao.db.execute(query)
         return result.scalars().all()
@@ -136,8 +144,12 @@ class PostRepository(BaseRepository[Post]):
         
         # Исключаем посты заблокированных пользователей
         if current_user_id:
-            blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
-            query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
+            try:
+                blocked_subquery = select(Block.blocked_id).where(Block.blocker_id == current_user_id)
+                query = query.where(not_(self.model.user_id.in_(blocked_subquery)))
+            except Exception:
+                # If blocks table doesn't exist yet, skip the blocking filter
+                pass
         
         result = await self.dao.db.execute(query)
         return result.scalars().all()

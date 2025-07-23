@@ -30,7 +30,12 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('blocker_id', 'blocked_id', name='unique_block_pair')
     )
-    op.drop_table('user_blocks')
+    
+    # Only drop user_blocks table if it exists
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    if 'user_blocks' in inspector.get_table_names():
+        op.drop_table('user_blocks')
     # ### end Alembic commands ###
 
 
