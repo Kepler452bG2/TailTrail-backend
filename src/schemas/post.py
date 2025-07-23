@@ -189,6 +189,9 @@ class PostResponseDTO(BaseModel):
     likes_count: int = Field(default=0, description="Number of likes")
     is_liked: bool = Field(default=False, description="Whether current user liked this post")
 
+    class Config:
+        from_attributes = True
+
 
 class LikeResponseDTO(BaseModel):
     """DTO for like response"""

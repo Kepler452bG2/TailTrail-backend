@@ -313,27 +313,30 @@ class PostService:
                 longitude=post.last_seen_longitude
             )
         
-        return PostResponseDTO(
-            id=post.id,
-            pet_name=post.pet_name,
-            pet_species=post.pet_species,
-            pet_breed=post.pet_breed,
-            age=post.age,
-            gender=post.gender,
-            weight=post.weight,
-            color=post.color,
-            description=post.description,
-            location_name=post.location_name,
-            contact_phone=post.contact_phone,
-            last_seen_location=location_dto,
-            images=post.images,
-            status=post.status,
-            created_at=post.created_at,
-            updated_at=post.updated_at,
-            user_id=post.user_id,
-            likes_count=likes_count,
-            is_liked=is_liked
-        )
+        # Create the DTO data dictionary
+        dto_data = {
+            "id": post.id,
+            "pet_name": post.pet_name,
+            "pet_species": post.pet_species,
+            "pet_breed": post.pet_breed,
+            "age": post.age,
+            "gender": post.gender,
+            "weight": post.weight,
+            "color": post.color,
+            "description": post.description,
+            "location_name": post.location_name,
+            "contact_phone": post.contact_phone,
+            "last_seen_location": location_dto,
+            "images": post.images,
+            "status": post.status,
+            "created_at": post.created_at,
+            "updated_at": post.updated_at,
+            "user_id": post.user_id,
+            "likes_count": likes_count,
+            "is_liked": is_liked
+        }
+        
+        return PostResponseDTO.model_validate(dto_data)
 
     async def send_complaint(self, post_id: uuid.UUID, complaint_text: str, user_id: uuid.UUID) -> dict:
         """Send complaint to external service"""
