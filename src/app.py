@@ -25,7 +25,14 @@ async def lifespan(app: FastAPI):
         await sessionmanager.close()
 
 
-app = FastAPI(lifespan=lifespan, title="TailTrail API")
+app = FastAPI(
+    lifespan=lifespan, 
+    title="TailTrail API",
+    # Настройки для WebSocket
+    websocket_ping_interval=20.0,  # Ping каждые 20 секунд
+    websocket_ping_timeout=10.0,   # Таймаут ping 10 секунд
+    websocket_close_timeout=10.0   # Таймаут закрытия 10 секунд
+)
 
 app.add_middleware(
     CORSMiddleware,

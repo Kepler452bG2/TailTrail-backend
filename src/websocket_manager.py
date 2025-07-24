@@ -43,55 +43,81 @@ class WebSocketManager:
             from src.services.chat.chat_service import ChatService
             
             async with sessionmanager.session() as session:
-                chat_service = ChatService(session)
-                user_chats = await chat_service.get_user_chats(user_id)
-                
-                # Сохраняем список чатов пользователя
-                self.user_chats[user_id] = set()
-                
-                for chat in user_chats:
-                    chat_id = chat.id
-                    # Добавляем пользователя в чат
-                    await self.join_chat(user_id, chat_id)
-                    # Сохраняем в список чатов пользователя
-                    self.user_chats[user_id].add(chat_id)
+                try:
+                    chat_service = ChatService(session)
+                    user_chats = await chat_service.get_user_chats(user_id)
                     
-                self.logger.info(f"User {user_id} automatically subscribed to {len(user_chats)} chats")
-                
+                    # Сохраняем список чатов пользователя
+                    self.user_chats[user_id] = set()
+                    
+                    for chat in user_chats:
+                        chat_id = chat.id
+                        # Добавляем пользователя в чат
+                        await self.join_chat(user_id, chat_id)
+                        # Сохраняем в список чатов пользователя
+                        self.user_chats[user_id].add(chat_id)
+                        
+                    self.logger.info(f"User {user_id} automatically subscribed to {len(user_chats)} chats")
+                    
+                except Exception as e:
+                    self.logger.error(f"Database error while getting chats for user {user_id}: {e}")
+                    # Создаем пустой набор чатов чтобы избежать ошибок
+                    self.user_chats[user_id] = set()
+                    
         except Exception as e:
             self.logger.error(f"Failed to subscribe user {user_id} to all chats: {e}")
+            # Создаем пустой набор чатов чтобы избежать ошибок
+            self.user_chats[user_id] = set()
 
     async def disconnect(self, user_id: UUID):
         """Отключить пользователя от веб-сокета"""
-        if user_id in self.active_connections:
-            del self.active_connections[user_id]
-        
-        # Убираем пользователя из всех чатов
-        for chat_id in list(self.chat_users.keys()):
-            if user_id in self.chat_users[chat_id]:
-                self.chat_users[chat_id].discard(user_id)
-                if not self.chat_users[chat_id]:
-                    del self.chat_users[chat_id]
-        
-        # Убираем пользователя из статуса "печатает"
-        for chat_id in list(self.typing_users.keys()):
-            if user_id in self.typing_users[chat_id]:
-                self.typing_users[chat_id].discard(user_id)
-                if not self.typing_users[chat_id]:
-                    del self.typing_users[chat_id]
-                else:
-                    # Уведомляем других пользователей что пользователь перестал печатать
-                    await self._broadcast_to_chat(chat_id, {
-                        "type": "user_stopped_typing",
-                        "data": {"user_id": str(user_id)}
-                    }, exclude_user=user_id)
-        
-        # Убираем список чатов пользователя
-        if user_id in self.user_chats:
-            del self.user_chats[user_id]
-        
-        # Обновляем статус пользователя на оффлайн
-        await self._update_user_online_status(user_id, False)
+        try:
+            if user_id in self.active_connections:
+                # Закрываем WebSocket соединение если оно еще открыто
+                try:
+                    websocket = self.active_connections[user_id]
+                    if not websocket.client_state.disconnected:
+                        await websocket.close(code=1000, reason="User disconnected")
+                except Exception as e:
+                    self.logger.error(f"Error closing websocket for user {user_id}: {e}")
+                finally:
+                    del self.active_connections[user_id]
+            
+            # Убираем пользователя из всех чатов
+            for chat_id in list(self.chat_users.keys()):
+                if user_id in self.chat_users[chat_id]:
+                    self.chat_users[chat_id].discard(user_id)
+                    if not self.chat_users[chat_id]:
+                        del self.chat_users[chat_id]
+            
+            # Убираем пользователя из статуса "печатает"
+            for chat_id in list(self.typing_users.keys()):
+                if user_id in self.typing_users[chat_id]:
+                    self.typing_users[chat_id].discard(user_id)
+                    if not self.typing_users[chat_id]:
+                        del self.typing_users[chat_id]
+                    else:
+                        # Уведомляем других пользователей что пользователь перестал печатать
+                        try:
+                            await self._broadcast_to_chat(chat_id, {
+                                "type": "user_stopped_typing",
+                                "data": {"user_id": str(user_id)}
+                            }, exclude_user=user_id)
+                        except Exception as e:
+                            self.logger.error(f"Error broadcasting typing status for user {user_id}: {e}")
+            
+            # Убираем список чатов пользователя
+            if user_id in self.user_chats:
+                del self.user_chats[user_id]
+            
+            # Обновляем статус пользователя на оффлайн
+            try:
+                await self._update_user_online_status(user_id, False)
+            except Exception as e:
+                self.logger.error(f"Error updating online status for user {user_id}: {e}")
+                
+        except Exception as e:
+            self.logger.error(f"Error in disconnect for user {user_id}: {e}")
 
     async def join_chat(self, user_id: UUID, chat_id: UUID):
         """Добавить пользователя в чат"""
@@ -111,13 +137,27 @@ class WebSocketManager:
         """Отправить сообщение конкретному пользователю"""
         if user_id in self.active_connections:
             try:
+                websocket = self.active_connections[user_id]
+                # Проверяем что соединение еще активно
+                if websocket.client_state.disconnected:
+                    self.logger.warning(f"WebSocket for user {user_id} is disconnected, removing from active connections")
+                    del self.active_connections[user_id]
+                    return
+                
                 self.logger.info(f"Sending WebSocket message to user {user_id}: {message}")
-                await self.active_connections[user_id].send_text(json.dumps(message, ensure_ascii=False))
+                await websocket.send_text(json.dumps(message, ensure_ascii=False))
                 self.logger.info(f"Successfully sent message to user {user_id}")
             except Exception as e:
                 self.logger.error(f"Failed to send message to user {user_id}: {e}")
-                # Если не удалось отправить, удаляем подключение
-                await self.disconnect(user_id)
+                # Если не удалось отправить, удаляем подключение без рекурсивного вызова
+                if user_id in self.active_connections:
+                    del self.active_connections[user_id]
+                # Убираем из чатов
+                for chat_id in list(self.chat_users.keys()):
+                    if user_id in self.chat_users[chat_id]:
+                        self.chat_users[chat_id].discard(user_id)
+                        if not self.chat_users[chat_id]:
+                            del self.chat_users[chat_id]
         else:
             self.logger.warning(f"User {user_id} not in active connections, cannot send message")
 
@@ -202,6 +242,31 @@ class WebSocketManager:
     def get_user_chats_list(self, user_id: UUID) -> Set[UUID]:
         """Получить список чатов пользователя"""
         return self.user_chats.get(user_id, set())
+
+    def get_connection_stats(self) -> dict:
+        """Получить статистику подключений для мониторинга"""
+        return {
+            "total_connections": len(self.active_connections),
+            "total_chats": len(self.chat_users),
+            "total_typing_users": sum(len(users) for users in self.typing_users.values()),
+            "active_connections": list(str(uid) for uid in self.active_connections.keys()),
+            "chat_distribution": {str(chat_id): len(users) for chat_id, users in self.chat_users.items()}
+        }
+
+    def cleanup_dead_connections(self):
+        """Очистить мертвые соединения"""
+        dead_connections = []
+        for user_id, websocket in self.active_connections.items():
+            try:
+                if websocket.client_state.disconnected:
+                    dead_connections.append(user_id)
+            except Exception:
+                dead_connections.append(user_id)
+        
+        for user_id in dead_connections:
+            self.logger.warning(f"Removing dead connection for user {user_id}")
+            if user_id in self.active_connections:
+                del self.active_connections[user_id]
 
     async def notify_chat_participants(self, chat_id: UUID, notification: dict, exclude_user: UUID = None):
         """Отправить уведомление всем участникам чата (для системных уведомлений)"""
