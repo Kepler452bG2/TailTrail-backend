@@ -93,7 +93,6 @@ class S3UploadService(BaseUploadService):
                 s3_key,
                 ExtraArgs={
                     'ContentType': content_type,
-                    'ACL': 'public-read',  # Делаем файл публично доступным
                     'CacheControl': 'max-age=31536000',  # Кешируем на год
                 }
             )

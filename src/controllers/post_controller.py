@@ -29,6 +29,7 @@ from src.utils.upload.upload_service import get_upload_service
 from src.utils.llm.gemini import validate_uploaded_files
 from src.utils.exceptions.exceptions import raise_validation_exception
 import logging
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -387,12 +388,11 @@ async def get_like_status(
     """Get like status for a post"""
     try:
         post_service = PostService(session)
-        likes_count, is_liked = await post_service.get_like_status(post_id, current_user.id if current_user else None)
-        return {
-            "post_id": post_id,
-            "likes_count": likes_count,
-            "is_liked": is_liked
-        }
+        like_status = await post_service.get_like_status(post_id, current_user.id if current_user else None)
+        return like_status
+    except ValidationError as e:
+        logger.error(f"Validation error in get_like_status: {e}")
+        raise_validation_exception(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -400,6 +400,81 @@ async def get_like_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting like status: {e}"
+        )
+
+
+@router.get('/images/check/{filename:path}', status_code=200)
+async def check_image_accessibility(filename: str):
+    """Проверить доступность изображения"""
+    try:
+        from src.utils.upload import get_upload_service
+        
+        upload_service = get_upload_service()
+        file_url = f"{upload_service.base_url}/{filename}"
+        
+        is_accessible = await upload_service.check_file_accessibility(file_url)
+        
+        return {
+            "filename": filename,
+            "url": file_url,
+            "accessible": is_accessible,
+            "bucket": upload_service.bucket_name,
+            "base_url": upload_service.base_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking image accessibility: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking image: {e}"
+        )
+
+
+@router.get('/s3/status', status_code=200)
+async def check_s3_status():
+    """Проверить статус S3 и настройки bucket"""
+    try:
+        from src.utils.upload import get_upload_service
+        
+        upload_service = get_upload_service()
+        
+        # Проверяем bucket
+        try:
+            response = upload_service.s3_client.head_bucket(Bucket=upload_service.bucket_name)
+            bucket_exists = True
+        except ClientError as e:
+            bucket_exists = False
+            bucket_error = str(e)
+        
+        # Проверяем bucket policy
+        try:
+            policy_response = upload_service.s3_client.get_bucket_policy(Bucket=upload_service.bucket_name)
+            bucket_policy = policy_response.get('Policy', 'No policy')
+        except ClientError as e:
+            bucket_policy = f"Error getting policy: {e}"
+        
+        # Проверяем public access block
+        try:
+            access_response = upload_service.s3_client.get_public_access_block(Bucket=upload_service.bucket_name)
+            public_access = access_response.get('PublicAccessBlockConfiguration', {})
+        except ClientError as e:
+            public_access = f"Error getting public access: {e}"
+        
+        return {
+            "bucket_name": upload_service.bucket_name,
+            "region": upload_service.region_name,
+            "base_url": upload_service.base_url,
+            "bucket_exists": bucket_exists,
+            "bucket_policy": bucket_policy,
+            "public_access_block": public_access,
+            "aws_credentials_configured": bool(upload_service.s3_client)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking S3 status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking S3: {e}"
         )
         
 

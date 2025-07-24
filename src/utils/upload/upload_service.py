@@ -21,7 +21,15 @@ class UploadService(BaseUploadService):
         
         self.bucket_name = getattr(settings, 'AWS_S3_BUCKET_NAME', 'tail-trail-bucket')
         self.region_name = getattr(settings, 'AWS_REGION', 'us-east-1')
-        self.base_url = f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com"
+        
+        # Используем CloudFront URL если настроен, иначе S3 URL
+        cloudfront_url = getattr(settings, 'AWS_CLOUDFRONT_URL', None)
+        if cloudfront_url:
+            self.base_url = cloudfront_url.rstrip('/')
+            logger.info(f"Using CloudFront URL: {self.base_url}")
+        else:
+            self.base_url = f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com"
+            logger.info(f"Using S3 URL: {self.base_url}")
         
         # Создаем S3 клиент
         try:
@@ -66,6 +74,8 @@ class UploadService(BaseUploadService):
             # Формируем ключ для S3
             s3_key = f"{folder}/{unique_filename}"
             
+            logger.info(f"Uploading file: {filename} -> {s3_key} (size: {len(file_content)} bytes)")
+            
             # Загружаем файл в S3
             file_obj = io.BytesIO(file_content)
             
@@ -82,7 +92,20 @@ class UploadService(BaseUploadService):
             # Формируем URL файла
             file_url = await self.get_file_url(s3_key)
             
-            logger.info(f"File uploaded successfully: {file_url}")
+            # Проверяем что файл действительно загрузился
+            try:
+                response = self.s3_client.head_object(Bucket=self.bucket_name, Key=s3_key)
+                actual_size = response.get('ContentLength', 0)
+                logger.info(f"File uploaded successfully: {file_url} (size: {actual_size} bytes)")
+                
+                if actual_size == 0:
+                    logger.error(f"File uploaded but size is 0: {s3_key}")
+                    return UploadResult(success=False, error="Файл загружен с нулевым размером")
+                    
+            except ClientError as e:
+                logger.error(f"Could not verify uploaded file: {e}")
+                return UploadResult(success=False, error=f"Не удалось проверить загруженный файл: {e}")
+            
             return UploadResult(success=True, file_url=file_url)
             
         except ClientError as e:
@@ -146,6 +169,17 @@ class UploadService(BaseUploadService):
         """Получить URL файла"""
         return f"{self.base_url}/{file_path}"
     
+    async def check_file_accessibility(self, file_url: str) -> bool:
+        """Проверить доступность файла по URL"""
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.head(file_url) as response:
+                    return response.status == 200
+        except Exception as e:
+            logger.error(f"Error checking file accessibility {file_url}: {e}")
+            return False
+    
     def _extract_s3_key_from_url(self, file_url: str) -> Optional[str]:
         """Извлечь ключ S3 из URL"""
         try:
@@ -207,7 +241,10 @@ class UploadService(BaseUploadService):
                         "Sid": "PublicReadGetObject",
                         "Effect": "Allow",
                         "Principal": "*",
-                        "Action": "s3:GetObject",
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:GetObjectVersion"
+                        ],
                         "Resource": f"arn:aws:s3:::{self.bucket_name}/*"
                     }
                 ]
@@ -218,6 +255,22 @@ class UploadService(BaseUploadService):
                 Bucket=self.bucket_name,
                 Policy=json.dumps(bucket_policy)
             )
+            
+            # Отключаем блокировку публичного доступа для работы без ACL
+            try:
+                self.s3_client.put_public_access_block(
+                    Bucket=self.bucket_name,
+                    PublicAccessBlockConfiguration={
+                        'BlockPublicAcls': True,      # Блокируем ACL
+                        'IgnorePublicAcls': True,     # Игнорируем ACL
+                        'BlockPublicPolicy': False,   # Разрешаем публичную политику
+                        'RestrictPublicBuckets': False # Разрешаем публичный доступ
+                    }
+                )
+                logger.info(f"Public access block configured for bucket {self.bucket_name}")
+            except ClientError as e:
+                logger.warning(f"Could not configure public access block: {e}")
+            
             logger.info(f"Public read policy set for bucket {self.bucket_name}")
             
         except ClientError as e:
