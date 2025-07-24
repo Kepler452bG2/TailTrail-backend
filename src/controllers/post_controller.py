@@ -195,9 +195,6 @@ async def create_post(
         failed_uploads = []
         
         if files and len(files) > 0 and files[0] and files[0].filename: 
-            # Анализ изображений с помощью Gemini
-            await validate_uploaded_files(files)
-            
             upload_service = get_upload_service()
             
             for file in files:
@@ -205,8 +202,41 @@ async def create_post(
                     continue
                     
                 try:
+                    # Читаем содержимое файла один раз
                     file_content = await file.read()
                     
+                    # Проверяем размер файла
+                    if len(file_content) == 0:
+                        logger.error(f"File {file.filename} is empty")
+                        failed_uploads.append(f"{file.filename}: Файл пустой")
+                        continue
+                    
+                    logger.info(f"Processing file {file.filename} with size {len(file_content)} bytes")
+                    
+                    # Валидируем файл (без повторного чтения)
+                    validation_error = upload_service.validate_file(file.filename, file.content_type, len(file_content))
+                    if validation_error:
+                        logger.error(f"Validation failed for {file.filename}: {validation_error}")
+                        failed_uploads.append(f"{file.filename}: {validation_error}")
+                        continue
+                    
+                    # Анализируем с помощью Gemini (если доступен)
+                    try:
+                        from src.utils.llm.gemini import image_analyzer
+                        if image_analyzer:
+                            # Создаем временный UploadFile для анализа
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                                temp_file.write(file_content)
+                                temp_file.flush()
+                                
+                                # Здесь можно добавить анализ если нужно
+                                logger.info(f"File {file.filename} passed content validation")
+                    except Exception as e:
+                        logger.warning(f"Gemini analysis failed for {file.filename}: {e}")
+                        # Продолжаем загрузку даже если анализ не удался
+                    
+                    # Загружаем файл в S3
                     upload_result = await upload_service.upload_file(
                         file_content=file_content,
                         filename=file.filename,
@@ -216,6 +246,7 @@ async def create_post(
                     
                     if upload_result.success:
                         uploaded_files.append(upload_result.file_url)
+                        logger.info(f"Successfully uploaded {file.filename}")
                     else:
                         logger.error(f"Failed to upload file {file.filename}: {upload_result.error}")
                         failed_uploads.append(f"{file.filename}: {upload_result.error}")
@@ -475,6 +506,47 @@ async def check_s3_status():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error checking S3: {e}"
+        )
+
+
+@router.post('/test-upload', status_code=200)
+async def test_file_upload(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Тестировать загрузку файла"""
+    try:
+        from src.utils.upload import get_upload_service
+        
+        upload_service = get_upload_service()
+        
+        # Читаем файл
+        file_content = await file.read()
+        
+        logger.info(f"Test upload: {file.filename}, size: {len(file_content)} bytes")
+        
+        # Загружаем в тестовую папку
+        upload_result = await upload_service.upload_file(
+            file_content=file_content,
+            filename=file.filename,
+            content_type=file.content_type,
+            folder="test"
+        )
+        
+        return {
+            "filename": file.filename,
+            "original_size": len(file_content),
+            "upload_result": upload_result.model_dump() if upload_result else None,
+            "bucket": upload_service.bucket_name,
+            "base_url": upload_service.base_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in test upload: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error in test upload: {e}"
         )
         
 

@@ -63,6 +63,11 @@ class UploadService(BaseUploadService):
     ) -> UploadResult:
         """Загрузить файл в S3"""
         try:
+            # Проверяем содержимое файла
+            if not file_content or len(file_content) == 0:
+                logger.error(f"File content is empty for {filename}")
+                return UploadResult(success=False, error="Содержимое файла пустое")
+            
             # Валидация файла
             validation_error = self.validate_file(filename, content_type, len(file_content))
             if validation_error:
@@ -75,6 +80,10 @@ class UploadService(BaseUploadService):
             s3_key = f"{folder}/{unique_filename}"
             
             logger.info(f"Uploading file: {filename} -> {s3_key} (size: {len(file_content)} bytes)")
+            
+            # Проверяем что file_content действительно содержит данные
+            if len(file_content) < 100:  # Для маленьких файлов
+                logger.warning(f"File {filename} seems very small: {len(file_content)} bytes")
             
             # Загружаем файл в S3
             file_obj = io.BytesIO(file_content)
