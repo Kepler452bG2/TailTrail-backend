@@ -20,18 +20,26 @@ class GeminiImageAnalyzer:
     
     def __init__(self):
         if not settings.GEMINI_API_KEY:
+            logger.warning("GEMINI_API_KEY не установлен, Gemini анализатор не может быть инициализирован")
             raise ValueError("GEMINI_API_KEY не установлен в настройках")
         
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # Настройки безопасности для более точного анализа
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
+        try:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # Настройки безопасности для более точного анализа
+            self.safety_settings = {
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
+            
+            logger.info("GeminiImageAnalyzer успешно инициализирован")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации Gemini API: {e}")
+            raise ValueError(f"Не удалось инициализировать Gemini API: {e}")
     
     async def _download_image(self, url: str) -> bytes:
         """Загружает изображение по URL"""
@@ -363,11 +371,23 @@ class GeminiImageAnalyzer:
 
 
 # Создаем экземпляр анализатора
-try:
-    image_analyzer = GeminiImageAnalyzer()
-except ValueError as e:
-    logger.warning(f"Не удалось инициализировать GeminiImageAnalyzer: {e}")
-    image_analyzer = None
+image_analyzer = None
+
+def initialize_gemini_analyzer():
+    """Инициализирует Gemini анализатор только если API ключ доступен"""
+    global image_analyzer
+    try:
+        if settings.GEMINI_API_KEY:
+            image_analyzer = GeminiImageAnalyzer()
+            logger.info("GeminiImageAnalyzer успешно инициализирован")
+        else:
+            logger.warning("GEMINI_API_KEY не установлен, Gemini анализатор отключен")
+    except Exception as e:
+        logger.warning(f"Не удалось инициализировать GeminiImageAnalyzer: {e}")
+        image_analyzer = None
+
+# Инициализируем при импорте модуля
+initialize_gemini_analyzer()
 
 
 async def validate_uploaded_files(files: List[UploadFile]) -> None:
@@ -381,7 +401,18 @@ async def validate_uploaded_files(files: List[UploadFile]) -> None:
         HTTPException: Если обнаружен неподходящий контент
     """
     if image_analyzer is None:
-        logger.warning("Gemini анализатор не инициализирован, пропускаем проверку")
+        logger.warning("Gemini анализатор не инициализирован, пропускаем проверку файлов")
         return
         
-    await image_analyzer.validate_files_for_upload(files)
+    if not files or len(files) == 0:
+        return
+        
+    try:
+        await image_analyzer.validate_files_for_upload(files)
+    except HTTPException:
+        # Передаем HTTPException дальше
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при анализе файлов: {e}")
+        # Не блокируем загрузку при ошибке анализа (fail-safe)
+        logger.warning("Продолжаем загрузку несмотря на ошибку анализа")
