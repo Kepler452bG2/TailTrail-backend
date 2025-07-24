@@ -286,10 +286,7 @@ async def delete_post(
     try:
         post_service = PostService(session)
         await post_service.delete_post(post_id, current_user.id)
-        return JSONResponse(
-            content={"detail": "Post successfully deleted"},
-            status_code=status.HTTP_204_NO_CONTENT
-        )
+        return None  # 204 No Content should not have a response body
     except HTTPException:
         raise
     except Exception as e:
